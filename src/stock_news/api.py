@@ -15,6 +15,7 @@ from stock_news.config import Settings, load_yaml
 from stock_news.news_window import latest_completed_window
 from stock_news.impact import get_sentiment_analyzer
 from stock_news.daily_briefs import validation_summary
+from stock_news.evidence_brief import build_evidence_brief
 
 
 load_dotenv()
@@ -183,6 +184,7 @@ def dashboard() -> dict[str, Any]:
                 key: saved_analysis.get(key, [])
                 for key in ("upside", "downside", "neutral", "directions")
             }
+            impact_candidates["evidence_brief"] = saved_analysis.get("evidence_brief")
             impact_status = (
                 "no_articles"
                 if int(brief.get("article_count", 0)) == 0
@@ -200,6 +202,9 @@ def dashboard() -> dict[str, Any]:
                 impact_candidates = {"upside": [], "downside": [], "neutral": [], "directions": []}
                 impact_status = "unavailable"
                 impact_error = f"{type(error).__name__}: {error}"
+            impact_candidates["evidence_brief"] = build_evidence_brief(
+                articles, reference_time=window_end
+            )
 
         run = database.collection_runs.find_one(
             {"window_start": window_start, "window_end": window_end},

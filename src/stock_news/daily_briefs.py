@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 
 from pymongo import DESCENDING
 
+from stock_news.evidence_brief import build_evidence_brief
+
 
 def fetch_price_snapshots(stocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Capture the latest completed daily close for each configured security."""
@@ -149,6 +151,7 @@ def make_daily_brief(
         article["display_title"] = article.get("title_en") or article.get("title") or ""
         summary = article.get("summary", {})
         article["display_summary"] = summary.get("text_en") or summary.get("text") or ""
+    evidence_brief = build_evidence_brief(articles, reference_time=window_end)
 
     if articles:
         try:
@@ -156,7 +159,12 @@ def make_daily_brief(
 
             impact_analysis = get_local_news_impact_model(
                 analysis_model_name, analysis_model_device
-            ).analyze(articles, companies)
+            ).analyze(
+                articles,
+                companies,
+                reference_time=window_end,
+                prepared_evidence_brief=evidence_brief,
+            )
             impact_status = "available"
             impact_error = None
             impact_provider = "huggingface-local"
@@ -204,6 +212,7 @@ def make_daily_brief(
         impact_model = analysis_model_name
         investor_note = "No matching company or global-topic stories were collected in this window."
 
+    impact_analysis["evidence_brief"] = evidence_brief
     report_date = window_end.astimezone(ZoneInfo(timezone_name)).date().isoformat()
     current = database.current_brief.find_one({"_id": "current"})
     is_new_report_day = bool(current and current.get("report_date") != report_date)
@@ -242,7 +251,7 @@ def make_daily_brief(
             "status": impact_status,
             "provider": impact_provider,
             "model": impact_model,
-            "method": "local_news_impact_analysis_with_next_session_validation",
+            "method": "local_news_impact_analysis_with_evidence_priority_v1_and_next_session_validation",
             "error": impact_error,
             **impact_analysis,
         },
