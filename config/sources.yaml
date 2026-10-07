@@ -1,0 +1,66 @@
+# Starter discovery source. Results contain the original publisher URL; the
+# collector extracts the article from that URL when the publisher allows it.
+gdelt:
+  enabled: true
+  # GDELT searches back from collection time; the collector clips results to
+  # the configured 48-hour Taiwan-time window.
+  timespan: 3days
+  max_records: 25
+
+# Media Cloud adds a separately indexed source for global news discovery.
+# Create an API key and choose one or more collection IDs in Media Cloud's
+# search tool before enabling this source. Keep credentials in .env, not here.
+mediacloud:
+  enabled: true
+  collection_ids: []
+  max_records: 100
+
+# Starter publisher-supported feeds. Keep only short summaries and metadata in
+# MongoDB; the publisher's original URL remains attached to every record.
+feeds:
+  - name: Taiwan Stock Exchange News
+    url: https://www.twse.com.tw/rwd/zh/news/feed?type=rss
+    language: zh-Hant
+    max_articles: 5
+  - name: Apple Newsroom (English)
+    url: https://www.apple.com/newsroom/rss-feed.rss
+    language: en
+    company_ids: [apple]
+    max_articles: 5
+  - name: Apple Newsroom (Japanese)
+    url: https://www.apple.com/jp/newsroom/rss-feed.rss
+    language: ja
+    company_ids: [apple]
+    max_articles: 5
+  - name: US Energy Information Administration - Today in Energy
+    url: https://www.eia.gov/rss/todayinenergy.xml
+    language: en
+    markets: [US]
+    max_articles: 10
+  - name: Federal Reserve - Monetary Policy Releases
+    url: https://www.federalreserve.gov/feeds/press_monetary.xml
+    language: en
+    markets: [US]
+    max_articles: 10
+  - name: European Central Bank - Press Releases
+    url: https://www.ecb.europa.eu/rss/press.html
+    language: en
+    markets: [EU]
+    max_articles: 10
+  - name: Bank of Japan - News (English)
+    url: https://www.boj.or.jp/en/rss/whatsnew.xml
+    language: en
+    markets: [JP]
+    max_articles: 10
+  - name: Bank of Japan - News (Japanese)
+    url: https://www.boj.or.jp/rss/whatsnew.xml
+    language: ja
+    markets: [JP]
+    max_articles: 10
+
+# Example shape:
+# feeds:
+#   - name: Example Publisher
+#     url: https://publisher.example/news.rss
+#     language: en           # en, zh, ja
+#     max_articles: 5

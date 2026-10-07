@@ -1,0 +1,106 @@
+services:
+  mongodb:
+    image: mongo:8.0
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "quit(db.adminCommand('ping').ok ? 0 : 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  collector:
+    profiles: [collector]
+    build: .
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-stock_news}
+      NEWS_MODEL_NAME: ${NEWS_MODEL_NAME:-csebuetnlp/mT5_multilingual_XLSum}
+      NEWS_MODEL_DEVICE: cpu
+      NEWS_HTTP_TIMEOUT_SECONDS: ${NEWS_HTTP_TIMEOUT_SECONDS:-20}
+      NEWS_USER_AGENT: ${NEWS_USER_AGENT:-StockNewsEventMonitor/0.1 (personal research)}
+      NEWS_TRANSLATION_MODEL_ZH: ${NEWS_TRANSLATION_MODEL_ZH:-Helsinki-NLP/opus-mt-zh-en}
+      NEWS_TRANSLATION_MODEL_JA: ${NEWS_TRANSLATION_MODEL_JA:-Helsinki-NLP/opus-mt-ja-en}
+      NEWS_WINDOW_TIMEZONE: ${NEWS_WINDOW_TIMEZONE:-Asia/Taipei}
+      NEWS_WINDOW_START_HOUR: ${NEWS_WINDOW_START_HOUR:-8}
+      NEWS_WINDOW_HOURS: ${NEWS_WINDOW_HOURS:-48}
+      NEWS_ANALYSIS_MODEL_NAME: ${NEWS_ANALYSIS_MODEL_NAME:-Qwen/Qwen2.5-0.5B-Instruct}
+      NEWS_ANALYSIS_MODEL_DEVICE: ${NEWS_ANALYSIS_MODEL_DEVICE:-cpu}
+      MEDIACLOUD_API_KEY: ${MEDIACLOUD_API_KEY:-}
+    volumes:
+      - ./config:/app/config:ro
+      - hf_cache:/root/.cache/huggingface
+
+  scheduler:
+    profiles: [app]
+    build: .
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    command: ["stock-news-scheduler"]
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-stock_news}
+      NEWS_MODEL_NAME: ${NEWS_MODEL_NAME:-csebuetnlp/mT5_multilingual_XLSum}
+      NEWS_MODEL_DEVICE: cpu
+      NEWS_HTTP_TIMEOUT_SECONDS: ${NEWS_HTTP_TIMEOUT_SECONDS:-20}
+      NEWS_USER_AGENT: ${NEWS_USER_AGENT:-StockNewsEventMonitor/0.1 (personal research)}
+      NEWS_TRANSLATION_MODEL_ZH: ${NEWS_TRANSLATION_MODEL_ZH:-Helsinki-NLP/opus-mt-zh-en}
+      NEWS_TRANSLATION_MODEL_JA: ${NEWS_TRANSLATION_MODEL_JA:-Helsinki-NLP/opus-mt-ja-en}
+      NEWS_WINDOW_TIMEZONE: ${NEWS_WINDOW_TIMEZONE:-Asia/Taipei}
+      NEWS_WINDOW_START_HOUR: ${NEWS_WINDOW_START_HOUR:-8}
+      NEWS_WINDOW_HOURS: ${NEWS_WINDOW_HOURS:-48}
+      NEWS_ANALYSIS_MODEL_NAME: ${NEWS_ANALYSIS_MODEL_NAME:-Qwen/Qwen2.5-0.5B-Instruct}
+      NEWS_ANALYSIS_MODEL_DEVICE: ${NEWS_ANALYSIS_MODEL_DEVICE:-cpu}
+      MEDIACLOUD_API_KEY: ${MEDIACLOUD_API_KEY:-}
+    volumes:
+      - ./config:/app/config:ro
+      - hf_cache:/root/.cache/huggingface
+
+  api:
+    profiles: [app]
+    build: .
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    command: ["uvicorn", "stock_news.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-stock_news}
+      NEWS_IMPACT_MODEL_NAME: ${NEWS_IMPACT_MODEL_NAME:-ProsusAI/finbert}
+      NEWS_IMPACT_MODEL_DEVICE: ${NEWS_IMPACT_MODEL_DEVICE:-cpu}
+      NEWS_WINDOW_TIMEZONE: ${NEWS_WINDOW_TIMEZONE:-Asia/Taipei}
+      NEWS_WINDOW_START_HOUR: ${NEWS_WINDOW_START_HOUR:-8}
+      NEWS_WINDOW_HOURS: ${NEWS_WINDOW_HOURS:-48}
+    volumes:
+      - ./config:/app/config:ro
+      - hf_cache:/root/.cache/huggingface
+    ports:
+      - "8000:8000"
+
+  frontend:
+    profiles: [app]
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "5173:5173"
+
+volumes:
+  mongo_data:
+  hf_cache:

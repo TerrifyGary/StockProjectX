@@ -1,0 +1,63 @@
+companies:
+  - id: tsmc
+    name: Taiwan Semiconductor Manufacturing Company
+    tickers: [TSM, "2330"]
+    exchanges: [NYSE, TWSE]
+    markets: [US, TW]
+    aliases: [TSMC, Taiwan Semiconductor, 台積電, 台积电, 台灣積體電路製造, 台湾积体电路制造, 台湾積体電路製造]
+
+  - id: tesla
+    name: Tesla
+    tickers: [TSLA]
+    exchanges: [NASDAQ]
+    markets: [US]
+    aliases: [Tesla, Tesla Inc., 特斯拉, テスラ]
+
+  - id: meta
+    name: Meta Platforms
+    tickers: [META]
+    exchanges: [NASDAQ]
+    markets: [US]
+    aliases: [Meta, Meta Platforms, Facebook, Instagram, WhatsApp, メタ, 脸书, 臉書]
+
+  - id: alphabet
+    name: Alphabet / Google
+    tickers: [GOOG, GOOGL]
+    exchanges: [NASDAQ]
+    markets: [US]
+    aliases: [Google, Alphabet, Google LLC, 谷歌, グーグル, アルファベット]
+
+  - id: apple
+    name: Apple
+    tickers: [AAPL]
+    exchanges: [NASDAQ]
+    markets: [US]
+    aliases: [Apple Inc., Apple, 苹果, 蘋果, アップル]
+
+  - id: nvidia
+    name: NVIDIA
+    tickers: [NVDA]
+    exchanges: [NASDAQ]
+    markets: [US]
+    aliases: [NVIDIA, Nvidia, NVIDIA Corporation, 英伟达, 英偉達, エヌビディア]
+
+  - id: spacex
+    name: SpaceX
+    tickers: []
+    exchanges: []
+    markets: [US]
+    aliases: [SpaceX, Space Exploration Technologies, 太空探索技术, 太空探索技術, スペースX]
+
+  - id: openai
+    name: OpenAI
+    tickers: []
+    exchanges: []
+    markets: [US]
+    aliases: [OpenAI, Open AI, 开放人工智能, 開放人工智慧, オープンAI]
+
+  - id: anthropic
+    name: Anthropic
+    tickers: []
+    exchanges: []
+    markets: [US]
+    aliases: [Anthropic, Anthropic PBC, Anthropic公司, Anthropic社]

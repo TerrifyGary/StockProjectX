@@ -1,0 +1,36 @@
+topics:
+  - id: geopolitics_conflict
+    label: Geopolitics and conflict
+    terms:
+      en: [war, invasion, military strike, armed conflict, sanctions, ceasefire, blockade]
+      zh-Hant: [戰爭, 入侵, 軍事攻擊, 武裝衝突, 制裁, 停火, 封鎖]
+      zh-Hans: [战争, 入侵, 军事攻击, 武装冲突, 制裁, 停火, 封锁]
+      ja: [戦争, 侵攻, 軍事攻撃, 武力衝突, 制裁, 停戦, 封鎖]
+  - id: energy_oil
+    label: Energy and oil
+    terms:
+      en: [crude oil, oil prices, oil supply, OPEC, natural gas, energy prices]
+      zh-Hant: [原油, 油價, 石油供應, 天然氣, 能源價格]
+      zh-Hans: [原油, 油价, 石油供应, 天然气, 能源价格]
+      ja: [原油, 原油価格, 石油供給, 天然ガス, エネルギー価格]
+  - id: bonds_interest_rates
+    label: Bonds and interest rates
+    terms:
+      en: [government bonds, bond yields, Treasury yields, interest rates, central bank rate]
+      zh-Hant: [公債, 債券殖利率, 公債殖利率, 利率, 央行利率]
+      zh-Hans: [国债, 债券收益率, 国债收益率, 利率, 央行利率]
+      ja: [国債, 債券利回り, 国債利回り, 金利, 中央銀行金利]
+  - id: currency_fx
+    label: Currency and foreign exchange
+    terms:
+      en: [exchange rate, foreign exchange, currency intervention, currency outlook]
+      zh-Hant: [匯率, 外匯, 貨幣干預, 貨幣展望]
+      zh-Hans: [汇率, 外汇, 货币干预, 货币展望]
+      ja: [為替レート, 外国為替, 為替介入, 通貨見通し]
+  - id: tax_trade_policy
+    label: Tax and trade policy
+    terms:
+      en: [tax rate, corporate tax, tax increase, tax cut, tariff, trade tax]
+      zh-Hant: [稅率, 企業稅, 加稅, 減稅, 關稅, 貿易稅]
+      zh-Hans: [税率, 企业税, 加税, 减税, 关税, 贸易税]
+      ja: [税率, 法人税, 増税, 減税, 関税, 貿易税]

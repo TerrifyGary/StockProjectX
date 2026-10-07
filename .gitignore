@@ -1,0 +1,33 @@
+# Local secrets and environment configuration
+.env
+.env.*
+!.env.example
+
+# Python environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Frontend dependencies and build output
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Local model/cache and runtime data
+.cache/
+cache/
+models/
+data/
+mongodb_data/
+logs/
+*.log
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/

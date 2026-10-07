@@ -1,0 +1,49 @@
+stocks:
+  - id: tesla
+    name: Tesla
+    display_symbol: TSLA
+    ticker: TSLA
+    market: US
+    currency: USD
+  - id: tsmc_adr
+    name: Taiwan Semiconductor Manufacturing Company ADR
+    display_symbol: TSM
+    ticker: TSM
+    market: US
+    currency: USD
+  - id: tsmc_taiwan
+    name: Taiwan Semiconductor Manufacturing Company
+    display_symbol: TSMC
+    ticker: 2330.TW
+    market: Taiwan
+    currency: TWD
+  - id: meta
+    name: Meta Platforms
+    display_symbol: META
+    ticker: META
+    market: US
+    currency: USD
+  - id: alphabet_a
+    name: Alphabet Class A
+    display_symbol: GOOGL
+    ticker: GOOGL
+    market: US
+    currency: USD
+  - id: alphabet_c
+    name: Alphabet Class C
+    display_symbol: GOOG
+    ticker: GOOG
+    market: US
+    currency: USD
+  - id: apple
+    name: Apple
+    display_symbol: AAPL
+    ticker: AAPL
+    market: US
+    currency: USD
+  - id: nvidia
+    name: NVIDIA
+    display_symbol: NVDA
+    ticker: NVDA
+    market: US
+    currency: USD
