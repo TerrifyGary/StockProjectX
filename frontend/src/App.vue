@@ -176,12 +176,13 @@ onMounted(() => loadDashboard())
           <section class="panel impact-panel">
             <div class="panel-head"><div><span class="panel-kicker">03 · SIGNAL REVIEW</span><h3>What could move?</h3></div><span class="beta-chip">{{ data?.impact_analysis?.status === 'unavailable' ? 'MODEL UNAVAILABLE' : data?.impact_analysis?.status === 'no_articles' ? 'NO CURRENT STORIES' : data?.impact_analysis?.status === 'fallback_sentiment' ? 'FINBERT FALLBACK' : 'LOCAL HF MODEL' }}</span></div>
             <p class="impact-intro">Local analysis of saved company and global-topic news, mapped to watchlist securities. Cues are hypotheses, not stock price forecasts.</p>
+            <div v-if="data?.impact_analysis?.evidence_brief?.summary" class="evidence-brief"><strong>PRE-ANALYSIS EVIDENCE BRIEF</strong><p>{{ data.impact_analysis.evidence_brief.summary }}</p></div>
             <div class="impact-row upside"><div class="impact-icon">↗</div><div class="impact-content"><strong>Potential upside cues</strong>
-              <template v-if="data?.impact_analysis?.upside?.length"><div v-for="(signal, index) in data.impact_analysis.upside" :key="`${signal.url}-${index}`" class="signal-item"><p>{{ signal.title }}</p><small>Possible upside · model confidence {{ (signal.score * 100).toFixed(0) }}%<span v-if="signal.symbols?.length"> · {{ signal.symbols.join(', ') }}</span></small><p v-if="signal.reason" class="signal-summary">{{ signal.reason }}</p><p v-else-if="signal.summary" class="signal-summary">{{ signal.summary }}</p><a :href="signal.url" target="_blank" rel="noreferrer">SOURCE ↗</a></div></template>
+              <template v-if="data?.impact_analysis?.upside?.length"><div v-for="(signal, index) in data.impact_analysis.upside" :key="`${signal.url}-${index}`" class="signal-item"><p>{{ signal.title }}</p><small>Possible upside · model confidence {{ (signal.score * 100).toFixed(0) }}%<span v-if="signal.evidence_priority_score != null"> · evidence priority {{ signal.evidence_priority_score }}/100</span><span v-if="signal.symbols?.length"> · {{ signal.symbols.join(', ') }}</span></small><p v-if="signal.reason" class="signal-summary">{{ signal.reason }}</p><p v-else-if="signal.summary" class="signal-summary">{{ signal.summary }}</p><a :href="signal.url" target="_blank" rel="noreferrer">SOURCE ↗</a></div></template>
               <p v-else class="no-signal">{{ data?.impact_analysis?.status === 'unavailable' ? 'The local sentiment model could not run.' : 'No positive sentiment cues in the stories shown.' }}</p>
             </div></div>
             <div class="impact-row downside"><div class="impact-icon">↘</div><div class="impact-content"><strong>Potential downside cues</strong>
-              <template v-if="data?.impact_analysis?.downside?.length"><div v-for="(signal, index) in data.impact_analysis.downside" :key="`${signal.url}-${index}`" class="signal-item"><p>{{ signal.title }}</p><small>Possible downside · model confidence {{ (signal.score * 100).toFixed(0) }}%<span v-if="signal.symbols?.length"> · {{ signal.symbols.join(', ') }}</span></small><p v-if="signal.reason" class="signal-summary">{{ signal.reason }}</p><p v-else-if="signal.summary" class="signal-summary">{{ signal.summary }}</p><a :href="signal.url" target="_blank" rel="noreferrer">SOURCE ↗</a></div></template>
+              <template v-if="data?.impact_analysis?.downside?.length"><div v-for="(signal, index) in data.impact_analysis.downside" :key="`${signal.url}-${index}`" class="signal-item"><p>{{ signal.title }}</p><small>Possible downside · model confidence {{ (signal.score * 100).toFixed(0) }}%<span v-if="signal.evidence_priority_score != null"> · evidence priority {{ signal.evidence_priority_score }}/100</span><span v-if="signal.symbols?.length"> · {{ signal.symbols.join(', ') }}</span></small><p v-if="signal.reason" class="signal-summary">{{ signal.reason }}</p><p v-else-if="signal.summary" class="signal-summary">{{ signal.summary }}</p><a :href="signal.url" target="_blank" rel="noreferrer">SOURCE ↗</a></div></template>
               <p v-else class="no-signal">{{ data?.impact_analysis?.status === 'unavailable' ? 'The local sentiment model could not run.' : 'No negative sentiment cues in the stories shown.' }}</p>
             </div></div>
             <p v-if="data?.impact_analysis?.neutral?.length" class="neutral-note">{{ data.impact_analysis.neutral.length }} {{ data.impact_analysis.neutral.length === 1 ? 'story was' : 'stories were' }} labeled neutral and are not shown as upside or downside cues.</p>
@@ -203,14 +204,28 @@ onMounted(() => loadDashboard())
         <div class="validation-copy">
           <span class="panel-kicker">05 · TRACK RECORD</span>
           <h2>Prediction validation</h2>
-          <p>Measures LSTM direction calls against the next available trading-session close. It begins training after 30 daily reports; news sentiment cues are tracked separately.</p>
+          <p>Scores original frozen calls against their exact target-session close. Each stock needs 30 completed observations and 40 usable training samples. Confidence below 60% produces an uncertain result. Refreshed news cues may differ from the original tracked calls.</p>
         </div>
         <div class="validation-metrics">
           <div><span>TRACKING DAYS</span><strong>{{ data?.validation?.days_running ?? 0 }}</strong></div>
           <div><span>LSTM ACCURACY</span><strong>{{ data?.validation?.accuracy_percent == null ? '—' : `${data.validation.accuracy_percent.toFixed(1)}%` }}</strong></div>
           <div><span>EVALUATED CALLS</span><strong>{{ data?.validation?.correct_calls ?? 0 }} / {{ data?.validation?.evaluated_calls ?? 0 }}</strong></div>
-          <div><span>LSTM TRAINING DAYS</span><strong>{{ data?.validation?.lstm_training_days ?? 0 }} / {{ data?.validation?.lstm_required_days ?? 30 }}</strong></div>
-          <span class="beta-chip">{{ data?.validation?.lstm_status === 'warming_up' ? 'LSTM WARMING UP' : 'LSTM ACTIVE' }}</span>
+          <div><span>MIN STOCK OBSERVATIONS</span><strong>{{ data?.validation?.lstm_training_days ?? 0 }} / {{ data?.validation?.lstm_required_days ?? 30 }}</strong></div>
+          <div><span>LSTM COVERAGE</span><strong>{{ data?.validation?.coverage_percent == null ? '—' : `${data.validation.coverage_percent.toFixed(1)}%` }}</strong></div>
+          <div><span>PENDING LSTM CALLS</span><strong>{{ data?.validation?.pending_calls ?? 0 }}</strong></div>
+          <div><span>BRIER SCORE</span><strong>{{ data?.validation?.brier_score == null ? '—' : data.validation.brier_score.toFixed(3) }}</strong></div>
+          <span class="beta-chip">{{ data?.validation?.lstm_status === 'available' ? 'LSTM ACTIVE' : `LSTM ${(data?.validation?.lstm_status || 'warming_up').replaceAll('_', ' ').toUpperCase()}` }}</span>
+        </div>
+        <div class="validation-details">
+          <p>Coverage is the share of matured forecasts that made an up/down call. Brier score measures raw probability error (lower is better); confidence is uncalibrated. Flat closes count as incorrect for directional calls. Splits are excluded.</p>
+          <div class="validation-table-wrap">
+            <table class="validation-table"><thead><tr><th>Model</th><th>Overall accuracy</th><th>Coverage</th><th>Accuracy on matched LSTM calls</th></tr></thead><tbody>
+              <tr v-for="(metric, model) in (data?.validation?.models || {})" :key="model"><td>{{ model.replaceAll('_', ' ') }}</td><td>{{ metric.accuracy_percent == null ? '—' : `${metric.accuracy_percent.toFixed(1)}%` }} ({{ metric.evaluated_calls }})</td><td>{{ metric.coverage_percent == null ? '—' : `${metric.coverage_percent.toFixed(1)}%` }}</td><td>{{ metric.paired_with_lstm?.accuracy_percent == null ? '—' : `${metric.paired_with_lstm.accuracy_percent.toFixed(1)}%` }} ({{ metric.paired_with_lstm?.evaluated_calls ?? 0 }})</td></tr>
+            </tbody></table>
+          </div>
+          <div class="training-coverage"><div v-for="stock in (data?.validation?.training_coverage || [])" :key="stock.security_id"><strong>{{ stock.symbol || stock.security_id }}</strong><span>{{ stock.observations }}/{{ stock.required_observations }} observations · {{ stock.training_samples }}/{{ stock.required_samples }} samples · {{ stock.status.replaceAll('_', ' ') }}</span></div></div>
+          <p v-if="data?.validation?.reference_price_rejections?.length">Forecasts withheld for {{ data.validation.reference_price_rejections.map(item => item.security_id).join(', ') }}: a valid completed reference close was unavailable.</p>
+          <p>Matched comparisons use the same stock, target session, and issuance batch. Earlier legacy scores are preserved in history and excluded from these metrics.</p>
         </div>
       </section>
 

@@ -4,6 +4,7 @@ pymongo>=4.10,<5
 fastapi>=0.115,<1
 uvicorn[standard]>=0.32,<1
 yfinance>=0.2.66,<2
+exchange-calendars>=4.5,<5
 tzdata>=2025.2
 PyYAML>=6.0,<7
 python-dotenv>=1.0,<2

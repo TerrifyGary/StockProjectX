@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from functools import lru_cache
 from typing import Any
+
+from stock_news.evidence_brief import build_evidence_brief
 
 
 @dataclass
@@ -86,6 +89,8 @@ class LocalNewsImpactModel:
         self,
         articles: list[dict[str, Any]],
         companies: list[dict[str, Any]],
+        reference_time: datetime | None = None,
+        prepared_evidence_brief: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         company_rows = []
         allowed_symbols: dict[str, str] = {}
@@ -96,17 +101,32 @@ class LocalNewsImpactModel:
                 {"name": company["name"], "aliases": company.get("aliases", []), "symbols": tickers}
             )
 
+        evidence_brief = prepared_evidence_brief or build_evidence_brief(
+            articles, reference_time=reference_time
+        )
+        score_by_article = {
+            item["article_id"]: item for item in evidence_brief["article_scores"]
+        }
         indexed_articles = []
         for index, article in enumerate(articles):
+            evidence_score = score_by_article[index]
             indexed_articles.append(
                 {
                     "id": index,
                     "title": article.get("display_title") or article.get("title") or "",
                     "summary": article.get("display_summary") or "",
                     "topics": article.get("topics", []),
+                    "published_at": (
+                        article["published_at"].isoformat()
+                        if hasattr(article.get("published_at"), "isoformat")
+                        else article.get("published_at")
+                    ),
+                    "source": article.get("source", {}).get("name"),
                     "companies_already_matched": [
                         entity.get("name") for entity in article.get("entities", [])
                     ],
+                    "evidence_priority_score": evidence_score["priority_score"],
+                    "evidence_score_components": evidence_score["components"],
                     "url": article.get("url"),
                 }
             )
@@ -119,10 +139,17 @@ class LocalNewsImpactModel:
                 "provided watchlist. Global macro or geopolitical stories may affect a company, "
                 "but connect them only when the article supports a clear transmission channel. "
                 "Do not turn generic positive/negative wording into a stock call. Omit unrelated "
-                "stories. Return {\"cues\":[{\"article_id\":integer,\"direction\":\"upside\"|\"downside\","
+                "stories. The evidence priority score is a rule-based ranking aid using relevance, "
+                "source traceability, freshness, and duplicate-title count. It is not a probability, "
+                "direction, or source credibility rating; do not infer upside/downside from the score. "
+                "Return {\"cues\":[{\"article_id\":integer,\"direction\":\"upside\"|\"downside\","
                 "\"symbols\":[string],\"reason\":string,\"confidence\":number}]} where confidence "
-                "is 0..1 and symbols must come from the watchlist. Use concise reasons grounded in "
-                "the story.\nWATCHLIST:\n"
+                "is your separate 0..1 confidence in the evidence-based cue, article_id must be from "
+                "the supplied stories, and symbols must come from the watchlist. Use concise reasons "
+                "grounded in the article. Preserve mixed evidence instead of forcing a net call.\n"
+                "PRE-ANALYSIS EVIDENCE BRIEF:\n"
+                + evidence_brief["summary"]
+                + "\nWATCHLIST:\n"
                 + json.dumps(company_rows, ensure_ascii=False)
                 + "\nSTORIES:\n"
                 + json.dumps(batch, ensure_ascii=False)
@@ -164,29 +191,35 @@ class LocalNewsImpactModel:
                         "source": article.get("source", {}).get("name"),
                         "entities": [item.get("name") for item in article.get("entities", [])],
                         "topics": article.get("topics", []),
+                        "article_id": article_index,
                         "symbols": symbols,
                         "direction": direction,
                         "reason": reason[:500],
                         "score": round(confidence, 4),
+                        "evidence_priority_score": score_by_article[article_index]["priority_score"],
+                        "rank_score": round(
+                            confidence * score_by_article[article_index]["priority_score"] / 100,
+                            4,
+                        ),
                         "sentiment": direction,
                     }
                 )
 
         upside = sorted(
             [cue for cue in cues if cue["direction"] == "upside"],
-            key=lambda cue: cue["score"],
+            key=lambda cue: cue["rank_score"],
             reverse=True,
         )
         downside = sorted(
             [cue for cue in cues if cue["direction"] == "downside"],
-            key=lambda cue: cue["score"],
+            key=lambda cue: cue["rank_score"],
             reverse=True,
         )
         votes: dict[str, dict[str, float]] = {}
         for cue in cues:
             for symbol in cue["symbols"]:
                 ballot = votes.setdefault(symbol, {"upside": 0.0, "downside": 0.0})
-                ballot[cue["direction"]] += cue["score"]
+                ballot[cue["direction"]] += cue["rank_score"]
         directions = []
         for symbol, ballot in sorted(votes.items()):
             margin = ballot["upside"] - ballot["downside"]
@@ -201,14 +234,23 @@ class LocalNewsImpactModel:
                 )
 
         cue_summary = [
-            {"direction": cue["direction"], "symbols": cue["symbols"], "reason": cue["reason"]}
+            {
+                "direction": cue["direction"],
+                "symbols": cue["symbols"],
+                "reason": cue["reason"],
+                "evidence_priority_score": cue["evidence_priority_score"],
+            }
             for cue in cues
         ]
         note_prompt = (
             "Write one concise daily investor note from these model-reviewed news cues. Mention "
             "the main risks and possible supports, avoid unsupported price targets, and state "
             "when evidence is mixed. Return JSON {\"investor_note\":string}. This is research "
-            "context, not personalized financial advice.\nCUES:\n"
+            "context, not personalized financial advice. The evidence priority score only ranks "
+            "traceable, relevant, fresh, and less-duplicated stories; it is not a forecast.\n"
+            "PRE-ANALYSIS EVIDENCE BRIEF:\n"
+            + evidence_brief["summary"]
+            + "\nCUES:\n"
             + json.dumps(cue_summary, ensure_ascii=False)
         )
         note_data = self._generate_json(note_prompt, max_new_tokens=220)
@@ -222,6 +264,7 @@ class LocalNewsImpactModel:
             "directions": directions,
             "investor_note": investor_note,
             "analyzed_articles": len(articles),
+            "evidence_brief": evidence_brief,
         }
 
 
