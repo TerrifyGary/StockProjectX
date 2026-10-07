@@ -92,6 +92,59 @@ The scheduled backend builds a daily brief from all collected MongoDB articles i
 
 The first-pass story priority is computed as `100 × relevance × source_traceability × freshness × novelty`. Relevance is `1.0` for a direct watchlist match, `0.65` for a global-topic story, and `0.35` otherwise. Traceability is `1.0` when both publisher and URL are present, `0.65` for a URL alone, `0.35` for a publisher alone, and `0.2` when neither is present. Freshness decreases linearly with age and is bounded from `0.5` to `1.0`; missing dates receive `0.5`. Novelty is `1 / sqrt(duplicate-title count)`. The model's cue confidence remains a separate 0–1 field; the combined ranking value is `cue confidence × priority / 100`. These initial weights are transparent heuristics and should be reviewed against stored outcomes before being treated as useful predictors.
 
+### Evidence scoring, frozen predictions, and LSTM validation
+
+Python creates the news evidence brief before Qwen generates the upside/downside cues and investor note. LSTM v2 is trained independently for each public security. It uses the first frozen report for each completed market session, with five consecutive sessions of close changes and news-direction scores as input. Exchange calendars resolve US (`XNYS`) and Taiwan (`XTAI`) sessions, including scheduled holidays and early closes; see the [exchange_calendars documentation](https://github.com/gerrymanoim/exchange_calendars).
+
+```mermaid
+flowchart TD
+    A[08:00 Taiwan-time collection and catch-up] --> B[MongoDB articles: summaries, translations, sources]
+    B --> C[Python evidence scores and grouped brief]
+    C --> D[Qwen: upside cues, downside cues, investor note]
+    D --> E[Refresh current dashboard brief]
+    D --> F[Freeze first daily forecast inputs]
+    P[Completed raw daily closes] --> F
+    H[(Immutable forecast_briefs)] --> I[Per-stock five-session sequences]
+    F --> I
+    I --> J{30 distinct sessions and 40 usable samples per stock?}
+    J -->|No| K[Warming up]
+    J -->|Yes| L[Train using only earlier available outcomes]
+    L --> M{Raw model confidence at least 60 percent?}
+    M -->|No| N[Uncertain: abstain from a direction call]
+    M -->|Yes| O[Up or down call]
+    K --> S[Freeze report once after inference]
+    N --> S
+    O --> S
+    F --> S
+    S --> H
+    S --> T[Exchange calendar selects reference and future target sessions]
+    T --> U[(prediction_records: original LSTM and baseline calls)]
+    U --> V[Pending across weekends, holidays, missing prices, and reruns]
+    P --> V
+    V --> W{Exact target-session close available?}
+    W -->|No| V
+    W -->|Yes| X[Evaluate once; exclude stock splits]
+    X --> Y[Accuracy, coverage, baseline comparisons, Brier score]
+    Y --> Z[Vue dashboard and prediction audit API]
+```
+
+Only completed reference bars can support a forecast. The target is the first exchange-session close **after actual issuance**, rather than after the news-window cutoff. Every original record stores its issuance time, security, reference close/date, target session/close time, model version, article IDs, input features, and training cutoff. Forecast inputs are inserted once per report date. A security/model/target-session key prevents weekend reports or collection retries from replacing or multiplying an existing call. The live news dashboard can refresh while the original calls remain frozen.
+
+LSTM training requires at least **30 distinct completed-session observations and 40 usable training samples for each security**, with both up and down labels. Forty five-session training samples generally require at least 45 observations, and gaps can require more. Weekend reports do not add observations. Missing sessions break a sequence; unchanged prices and splits do not become direction-training labels. Each training target must have closed before forecast issuance. Training and evaluation start with the new immutable records; old mutable briefs are retained but are not treated as verified v2 inputs or scores.
+
+An LSTM class confidence below `0.60` produces `uncertain`. Three baselines are recorded alongside it: always up, previous-session direction, and the original news-only direction (which may also abstain). Predictions remain pending until the exact target price is available; a later price never substitutes for a missed target. Price retrieval expands back to the earliest pending reference date so missed runs can recover exact outcomes. Scheduled or unplanned closures not represented by the installed calendar can leave a record pending for review; calendar mappings and holiday data should be maintained as market coverage grows.
+
+Accuracy counts correct up/down calls divided by evaluated directional calls; a flat actual close counts as incorrect. Coverage counts directional calls divided by all matured, non-excluded forecasts, including uncertain forecasts. Stock splits between reference and target are excluded because raw-close comparisons cross different share units. Overall baseline metrics are shown with separate comparisons on matched LSTM calls sharing a security, target session, and issuance batch. Brier score and confidence bins evaluate raw probabilities on binary up/down outcomes, including abstained forecasts. **Confidence remains uncalibrated**: these metrics help assess calibration but do not turn it into a validated probability. LSTM outputs currently do not feed Qwen suggestions.
+
+Inspect original calls through `/api/predictions?model=lstm&status=pending&limit=50`; accepted models are `lstm`, `always_up`, `previous_direction`, and `news_only`, and statuses are `pending`, `evaluated`, and `excluded`. `/api/dashboard` and `/api/history` return validation metrics, per-security training coverage, and baseline comparisons. Earlier legacy evaluations stay in archived briefs and are excluded from the v2 totals.
+
+Run the focused regression suite with:
+
+```bash
+python -m pip install -e ".[local-model,test]"
+python -m unittest discover -s tests -v
+```
+
 ### What the Python code is responsible for
 
 The Python backend includes a command-line collector, a scheduled refresh process, and an HTTP API. The scheduler checks once per minute for a missing completed window and collects a configurable number of hours ending at the most recent 08:00 Asia/Taipei boundary (48 hours by default). This catches up after a restart or a missed 08:00 boundary, such as when Docker Desktop or its host is asleep. Failed runs are retried after 15 minutes. The Vue page reads saved results through the API; it does not start a scrape when a visitor opens the page.
@@ -108,8 +161,10 @@ The Python backend includes a command-line collector, a scheduled refresh proces
 | `src/stock_news/evidence_brief.py` | Calculates per-story evidence-priority components and creates a ticker/global-topic brief for Hugging Face. Priority is a transparent ranking aid, not a prediction. |
 | `src/stock_news/storage.py` | Connects to MongoDB's `stock_news.articles` collection and creates indexes for deduplication and common date, market, company, and language queries. |
 | `src/stock_news/local_analysis.py` | Supplies the evidence brief and per-story scores to the local Qwen instruction model, then produces source-linked upside/downside cues, watchlist direction calls, and the daily investor note. Model confidence remains separate from evidence priority. |
-| `src/stock_news/daily_briefs.py` | Builds the 08:00 Taiwan-time brief, snapshots daily closing prices, archives the previous brief, and evaluates prior calls when the next market session closes. |
-| `src/stock_news/lstm.py` | Trains a small local LSTM on daily price movements and news direction features after at least 30 daily reports are available. Its direction confidence is tracked separately and currently does not feed the Hugging Face cues. |
+| `src/stock_news/daily_briefs.py` | Builds the 08:00 Taiwan-time brief, snapshots daily closing prices, archives the previous brief, freezes original forecasting inputs and processes all pending calls when exact target-session closes are available. |
+| `src/stock_news/lstm.py` | Trains an independent LSTM per security on frozen, chronological session sequences after 30 observations and 40 usable samples; emits up/down or uncertain and reports per-stock coverage. |
+| `src/stock_news/trading_sessions.py` | Resolves completed reference sessions and future target closes using US/Taiwan exchange calendars. |
+| `src/stock_news/forecast_tracking.py` | Stores immutable original calls, evaluates exact target closes idempotently, and calculates accuracy, coverage, baselines, and raw-probability diagnostics. |
 | `src/stock_news/api.py` | Serves the dashboard's latest completed Taiwan-time news window, saved daily brief, history, validation data, and stock quote/history data. |
 | `src/stock_news/scheduler.py` | Checks once per minute for a missing completed Taiwan-time window, runs collection, and retries windows that failed without writing a run record. |
 | `config/sources.yaml` | Lists RSS/Atom feeds, GDELT settings, and Media Cloud collection IDs and per-run limits. |
@@ -211,13 +266,13 @@ docker compose --profile app up --build -d
 
 Open [http://localhost:5173](http://localhost:5173) for the Vue dashboard and [http://localhost:8000/docs](http://localhost:8000/docs) for the API reference. The scheduler service checks for the latest completed news window once a minute and runs collection at 08:00 Taiwan time. It catches up after startup or a missed boundary if no run is recorded, and retries an incomplete run or a run with failed feeds after 15 minutes. Keep Docker Desktop and the scheduler container running for the daily update. To refresh news manually, run `docker compose --profile collector run --build --rm collector stock-news`.
 
-At each daily collection, the backend analyzes all saved articles published in the 08:00-to-08:00 Taiwan-time window, then stores the generated cues and investor note in `current_brief`. When the next report date begins, the previous brief is copied into `brief_history`; raw article records stay in `articles`. The frontend displays the top five articles and the saved daily analysis. If a window has no matching stories, the brief records that fact and the dashboard may show the latest saved articles with an **Archive Preview** label; older stories are never presented as current-window news. The bottom validation panel compares each directional call with the next available trading-session close. The LSTM waits for at least 30 report days and enough training examples before producing calls; until then it reports that it is collecting history. Accuracy is accumulated only after a later close makes a call measurable. Historical results from the earlier FinBERT-only phase are not equivalent to these model-generated calls.
+At each daily collection, the backend analyzes all saved articles published in the 08:00-to-08:00 Taiwan-time window, then stores the generated cues and investor note in `current_brief`. When the next report date begins, the previous brief is copied into `brief_history`; raw article records stay in `articles`. The frontend displays the top five articles and the saved daily analysis. If a window has no matching stories, the brief records that fact and the dashboard may show the latest saved articles with an **Archive Preview** label; older stories are never presented as current-window news. The bottom validation panel scores immutable calls against their exact target-session closes, reports abstention coverage and baseline comparisons, and shows each stock's training progress. LSTM v2 requires 30 completed-session observations and 40 usable samples per security. Earlier mutable-brief evaluations remain archived and are excluded from v2 metrics.
 
 Market Pulse uses the `yfinance` Python client to retrieve the latest available Yahoo Finance quote and one-month daily history for TSLA, TSM (TSMC's US ADR), 2330.TW (TSMC Taiwan), META, GOOGL, GOOG, AAPL, and NVDA. The two Alphabet share classes and both TSMC listings appear as separate securities. SpaceX, OpenAI, and Anthropic are private companies and have no public stock quotes, so they remain in the news watchlist but are not shown as stock cards. Quotes can be delayed, unavailable, or rate-limited; this prototype is not a licensed real-time market data service. See the [yfinance project documentation](https://github.com/ranaroussi/yfinance).
 
 ### MongoDB document and indexes
 
-The collector uses database `stock_news` and collection `articles`. Each document represents an article URL and includes original `title` plus `title_en`, source details and URL, `published_at`, `collected_at`, `language`, `markets`, matched `entities`, matched global `topics`, `summary`, `translation`, and `content_storage`. Daily generated reports are stored separately in `current_brief` (one replaceable current report) and `brief_history` (one archived report per report date, including price snapshots, LSTM output, and later evaluation). The `summary` object records source-language `text`, English `text_en`, language, provider, model, generation time, and status. The `translation` object records target language, provider/model, status, and errors. Article identity is a SHA-256 hash of the canonical URL (`article_key`).
+The collector uses database `stock_news` and collection `articles`. Each document represents an article URL and includes original `title` plus `title_en`, source details and URL, `published_at`, `collected_at`, `language`, `markets`, matched `entities`, matched global `topics`, `summary`, `translation`, and `content_storage`. Daily display reports are stored in `current_brief` (one replaceable current report) and `brief_history` (one archived display report per report date). `forecast_briefs` keeps the original immutable daily forecasting inputs and LSTM output. `prediction_records` stores one original call per security/model/target session, with pending/evaluated/excluded status and exact-session outcomes. Legacy evaluations remain in `brief_history`; new metrics come exclusively from `prediction_records`. The `summary` object records source-language `text`, English `text_en`, language, provider, model, generation time, and status. The `translation` object records target language, provider/model, status, and errors. Article identity is a SHA-256 hash of the canonical URL (`article_key`).
 
 Startup creates indexes for unique `article_key` plus publication date and the expected market/date, company/date, and language/date filters. The set is intentionally small and should be adjusted if dashboard query patterns change.
 
@@ -232,7 +287,7 @@ Startup creates indexes for unique `article_key` plus publication date and the e
 
 ## Project status
 
-The local app includes the multilingual Python collector, global topic discovery through GDELT, optional Media Cloud and configured publisher feeds, 08:00 Asia/Taipei scheduler, local Hugging Face daily impact analysis, experimental LSTM direction model and next-session evaluation, FastAPI dashboard API, MongoDB, and Vue dark-mode dashboard. The LSTM needs at least 30 daily reports and 40 training examples before producing predictions. The impact model and LSTM are experimental and have not been established as reliable forecasts; topic matches and model-generated stock cues can be noisy, so check the linked original sources before drawing conclusions. Configured discovery uses GDELT, Media Cloud (after its API key and collection IDs are configured), and official RSS sources listed in `config/sources.yaml`; broader publisher coverage, a Taiwan central-bank feed, and US/Taiwan/Japan benchmark bond price/yield series remain future additions.
+The local app includes the multilingual Python collector, global topic discovery through GDELT, optional Media Cloud and configured publisher feeds, 08:00 Asia/Taipei scheduler, local Hugging Face daily impact analysis, experimental LSTM direction model and next-session evaluation, FastAPI dashboard API, MongoDB, and Vue dark-mode dashboard. The LSTM needs at least 30 distinct completed-session observations and 40 usable training examples per security before producing predictions. Low-confidence forecasts abstain; confidence remains uncalibrated. The impact model and LSTM are experimental and have not been established as reliable forecasts; topic matches and model-generated stock cues can be noisy, so check the linked original sources before drawing conclusions. Configured discovery uses GDELT, Media Cloud (after its API key and collection IDs are configured), and official RSS sources listed in `config/sources.yaml`; broader publisher coverage, a Taiwan central-bank feed, and US/Taiwan/Japan benchmark bond price/yield series remain future additions.
 
 ## Possible next steps
 

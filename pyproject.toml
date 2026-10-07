@@ -13,6 +13,7 @@ dynamic = ["dependencies"]
 dependencies = {file = ["requirements.txt"]}
 
 [project.optional-dependencies]
+test = ["mongomock>=4.3,<5"]
 local-model = [
     "torch>=2.2,<3",
     "transformers>=4.45,<5",

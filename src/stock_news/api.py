@@ -20,7 +20,7 @@ from stock_news.evidence_brief import build_evidence_brief
 
 load_dotenv()
 settings = Settings.from_environment()
-mongo_client = MongoClient(settings.mongo_uri, serverSelectionTimeoutMS=5000)
+mongo_client = MongoClient(settings.mongo_uri, serverSelectionTimeoutMS=5000, tz_aware=True)
 database = mongo_client[settings.mongo_database]
 app = FastAPI(title="Stock News Dashboard API", version="0.1.0")
 _quote_lock = threading.Lock()
@@ -304,9 +304,28 @@ def history(limit: int = 30) -> dict[str, Any]:
                 "impact_analysis.upside": 1,
                 "impact_analysis.downside": 1,
                 "evaluation": 1,
+                "forecast_issued_at": 1,
+                "forecast_inputs_frozen": 1,
+                "lstm": 1,
             },
         )
         .sort("report_date", DESCENDING)
         .limit(limit)
     )
     return {"items": briefs, "validation": validation_summary(database)}
+
+
+@app.get("/api/predictions")
+def predictions(limit: int = 50, model: str | None = None, status: str | None = None) -> dict[str, Any]:
+    """Inspect original issued calls and exact-session outcomes without rewriting them."""
+    query: dict[str, Any] = {}
+    if model is not None:
+        if model not in {"lstm", "always_up", "previous_direction", "news_only"}:
+            raise HTTPException(status_code=400, detail="Unknown prediction model")
+        query["model"] = model
+    if status is not None:
+        if status not in {"pending", "evaluated", "excluded"}:
+            raise HTTPException(status_code=400, detail="Unknown prediction status")
+        query["status"] = status
+    items = list(database.prediction_records.find(query, {"_id": 0}).sort("issued_at", DESCENDING).limit(min(max(limit, 1), 100)))
+    return {"items": items, "validation": validation_summary(database)}

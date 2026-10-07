@@ -116,7 +116,11 @@ class LocalNewsImpactModel:
                     "title": article.get("display_title") or article.get("title") or "",
                     "summary": article.get("display_summary") or "",
                     "topics": article.get("topics", []),
-                    "published_at": article.get("published_at"),
+                    "published_at": (
+                        article["published_at"].isoformat()
+                        if hasattr(article.get("published_at"), "isoformat")
+                        else article.get("published_at")
+                    ),
                     "source": article.get("source", {}).get("name"),
                     "companies_already_matched": [
                         entity.get("name") for entity in article.get("entities", [])

@@ -204,14 +204,28 @@ onMounted(() => loadDashboard())
         <div class="validation-copy">
           <span class="panel-kicker">05 · TRACK RECORD</span>
           <h2>Prediction validation</h2>
-          <p>Measures LSTM direction calls against the next available trading-session close. It begins training after 30 daily reports; news sentiment cues are tracked separately.</p>
+          <p>Scores original frozen calls against their exact target-session close. Each stock needs 30 completed observations and 40 usable training samples. Confidence below 60% produces an uncertain result. Refreshed news cues may differ from the original tracked calls.</p>
         </div>
         <div class="validation-metrics">
           <div><span>TRACKING DAYS</span><strong>{{ data?.validation?.days_running ?? 0 }}</strong></div>
           <div><span>LSTM ACCURACY</span><strong>{{ data?.validation?.accuracy_percent == null ? '—' : `${data.validation.accuracy_percent.toFixed(1)}%` }}</strong></div>
           <div><span>EVALUATED CALLS</span><strong>{{ data?.validation?.correct_calls ?? 0 }} / {{ data?.validation?.evaluated_calls ?? 0 }}</strong></div>
-          <div><span>LSTM TRAINING DAYS</span><strong>{{ data?.validation?.lstm_training_days ?? 0 }} / {{ data?.validation?.lstm_required_days ?? 30 }}</strong></div>
-          <span class="beta-chip">{{ data?.validation?.lstm_status === 'warming_up' ? 'LSTM WARMING UP' : 'LSTM ACTIVE' }}</span>
+          <div><span>MIN STOCK OBSERVATIONS</span><strong>{{ data?.validation?.lstm_training_days ?? 0 }} / {{ data?.validation?.lstm_required_days ?? 30 }}</strong></div>
+          <div><span>LSTM COVERAGE</span><strong>{{ data?.validation?.coverage_percent == null ? '—' : `${data.validation.coverage_percent.toFixed(1)}%` }}</strong></div>
+          <div><span>PENDING LSTM CALLS</span><strong>{{ data?.validation?.pending_calls ?? 0 }}</strong></div>
+          <div><span>BRIER SCORE</span><strong>{{ data?.validation?.brier_score == null ? '—' : data.validation.brier_score.toFixed(3) }}</strong></div>
+          <span class="beta-chip">{{ data?.validation?.lstm_status === 'available' ? 'LSTM ACTIVE' : `LSTM ${(data?.validation?.lstm_status || 'warming_up').replaceAll('_', ' ').toUpperCase()}` }}</span>
+        </div>
+        <div class="validation-details">
+          <p>Coverage is the share of matured forecasts that made an up/down call. Brier score measures raw probability error (lower is better); confidence is uncalibrated. Flat closes count as incorrect for directional calls. Splits are excluded.</p>
+          <div class="validation-table-wrap">
+            <table class="validation-table"><thead><tr><th>Model</th><th>Overall accuracy</th><th>Coverage</th><th>Accuracy on matched LSTM calls</th></tr></thead><tbody>
+              <tr v-for="(metric, model) in (data?.validation?.models || {})" :key="model"><td>{{ model.replaceAll('_', ' ') }}</td><td>{{ metric.accuracy_percent == null ? '—' : `${metric.accuracy_percent.toFixed(1)}%` }} ({{ metric.evaluated_calls }})</td><td>{{ metric.coverage_percent == null ? '—' : `${metric.coverage_percent.toFixed(1)}%` }}</td><td>{{ metric.paired_with_lstm?.accuracy_percent == null ? '—' : `${metric.paired_with_lstm.accuracy_percent.toFixed(1)}%` }} ({{ metric.paired_with_lstm?.evaluated_calls ?? 0 }})</td></tr>
+            </tbody></table>
+          </div>
+          <div class="training-coverage"><div v-for="stock in (data?.validation?.training_coverage || [])" :key="stock.security_id"><strong>{{ stock.symbol || stock.security_id }}</strong><span>{{ stock.observations }}/{{ stock.required_observations }} observations · {{ stock.training_samples }}/{{ stock.required_samples }} samples · {{ stock.status.replaceAll('_', ' ') }}</span></div></div>
+          <p v-if="data?.validation?.reference_price_rejections?.length">Forecasts withheld for {{ data.validation.reference_price_rejections.map(item => item.security_id).join(', ') }}: a valid completed reference close was unavailable.</p>
+          <p>Matched comparisons use the same stock, target session, and issuance batch. Earlier legacy scores are preserved in history and excluded from these metrics.</p>
         </div>
       </section>
 

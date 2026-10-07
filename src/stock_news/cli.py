@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from stock_news.collector import build_gdelt_feeds, collect_feed
 from stock_news.config import Settings, load_companies, load_feeds, load_topics, load_yaml
 from stock_news.daily_briefs import fetch_price_snapshots, make_daily_brief
+from stock_news.forecast_tracking import pending_price_start_dates
 from stock_news.storage import connect_collection
 from stock_news.summarizer import LocalMTS5Summarizer
 from stock_news.translation import LocalMarianTranslator, backfill_english_translations
@@ -130,7 +131,9 @@ def main() -> int:
             f"failed: {total_failed}."
         )
         dashboard_config = load_yaml(Path("config/dashboard.yaml"))
-        prices = fetch_price_snapshots(dashboard_config.get("stocks", []))
+        prices = fetch_price_snapshots(
+            dashboard_config.get("stocks", []), pending_price_start_dates(collection.database)
+        )
         brief = make_daily_brief(
             database=collection.database,
             window_start=window_start,
