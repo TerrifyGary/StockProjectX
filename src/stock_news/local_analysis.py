@@ -104,6 +104,8 @@ class LocalNewsImpactModel:
         evidence_brief = prepared_evidence_brief or build_evidence_brief(
             articles, reference_time=reference_time
         )
+        etf_context = evidence_brief.get("etf_context", {})
+        etf_profiles = {p["symbol"]: p for p in etf_context.get("profiles", [])}
         score_by_article = {
             item["article_id"]: item for item in evidence_brief["article_scores"]
         }
@@ -149,6 +151,8 @@ class LocalNewsImpactModel:
                 "grounded in the article. Preserve mixed evidence instead of forcing a net call.\n"
                 "PRE-ANALYSIS EVIDENCE BRIEF:\n"
                 + evidence_brief["summary"]
+                + "\nETF CONTEXT (candidate links only; omit unsupported directions; never invent weights):\n"
+                + json.dumps(etf_context, ensure_ascii=False, default=str)
                 + "\nWATCHLIST:\n"
                 + json.dumps(company_rows, ensure_ascii=False)
                 + "\nSTORIES:\n"
@@ -175,6 +179,8 @@ class LocalNewsImpactModel:
                         if str(symbol).casefold() in allowed_symbols
                     }
                 )
+                symbols = [symbol for symbol in symbols if symbol not in etf_profiles or any(e["article_id"] == article_index for e in etf_profiles[symbol]["evidence"])]
+                etf_links = [{"symbol": symbol, "benchmark": etf_profiles[symbol]["benchmark"], "source_url": etf_profiles[symbol]["source_url"], "holdings_as_of": etf_profiles[symbol].get("holdings_as_of"), "holdings_status": etf_profiles[symbol]["holdings_status"], **e} for symbol in symbols if symbol in etf_profiles for e in etf_profiles[symbol]["evidence"] if e["article_id"] == article_index]
                 reason = str(cue.get("reason", "")).strip()
                 if not symbols or not reason:
                     continue
@@ -191,6 +197,8 @@ class LocalNewsImpactModel:
                         "source": article.get("source", {}).get("name"),
                         "entities": [item.get("name") for item in article.get("entities", [])],
                         "topics": article.get("topics", []),
+                        "etf_connections": etf_links,
+                        "horizon": "short-term hypothesis",
                         "article_id": article_index,
                         "symbols": symbols,
                         "direction": direction,
@@ -216,8 +224,15 @@ class LocalNewsImpactModel:
             reverse=True,
         )
         votes: dict[str, dict[str, float]] = {}
+        seen_etf_votes = set()
         for cue in cues:
             for symbol in cue["symbols"]:
+                if symbol in etf_profiles:
+                    event = " ".join(str(cue.get("title") or cue.get("url")).casefold().split())
+                    key = (symbol, event, cue["direction"])
+                    if key in seen_etf_votes:
+                        continue
+                    seen_etf_votes.add(key)
                 ballot = votes.setdefault(symbol, {"upside": 0.0, "downside": 0.0})
                 ballot[cue["direction"]] += cue["rank_score"]
         directions = []

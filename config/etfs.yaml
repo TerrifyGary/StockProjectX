@@ -1,0 +1,22 @@
+etfs:
+  - symbol: VOO
+    benchmark: S&P 500
+    market: US
+    source_url: https://advisors.vanguard.com/investments/products/voo/vanguard-sp-500-etf
+    sectors: [technology, broad_equity]
+    holdings: []
+    holdings_as_of: null
+  - symbol: QQQ
+    benchmark: Nasdaq-100
+    market: US
+    source_url: https://www.invesco.com/qqq-etf/en/about.html
+    sectors: [technology]
+    holdings: []
+    holdings_as_of: null
+  - symbol: "0050"
+    benchmark: FTSE TWSE Taiwan 50
+    market: Taiwan
+    source_url: https://www.twse.com.tw/en/ETFortune-institute/etfInfo/0050
+    sectors: [taiwan_equity]
+    holdings: []
+    holdings_as_of: null

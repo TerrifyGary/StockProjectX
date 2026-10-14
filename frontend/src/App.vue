@@ -57,6 +57,11 @@ function chartArea(history) {
   return `${first},92 ${points} ${last},92`
 }
 
+function freshnessTime(value) {
+  if (!value) return 'Not recorded'
+  return new Date(value).toLocaleString('en-US', { timeZone: 'Asia/Taipei', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' TW'
+}
+
 function asOf(value) {
   if (!value) return 'No quote available'
   return `Latest session · ${new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
@@ -118,6 +123,8 @@ onMounted(() => loadDashboard())
         </div>
       </section>
 
+      <section v-if="data?.freshness" class="freshness-panel" aria-label="Data freshness"><h2>Data freshness</h2><div class="freshness-grid"><p><strong>Collection</strong>{{ formatTopic(data.freshness.collection_status) }} · {{ data.freshness.brief_current ? "Current-window brief" : "Brief awaiting update" }}</p><p><strong>Last successful collection</strong>{{ freshnessTime(data.freshness.last_success?.updated_at) }}</p><p><strong>Brief generated</strong>{{ freshnessTime(data.freshness.brief_generated_at) }}</p><p><strong>Next scheduled boundary</strong>{{ freshnessTime(data.freshness.next_scheduled_at) }}</p></div><p>{{ data.freshness.schedule_note }}</p><p v-if="data.news_mode === 'archive'">Archive preview: displayed stories are older than the active news window.</p><p v-if="data.freshness.error">Collection error: {{ data.freshness.error }}</p><details><summary>Source results for this window</summary><p v-if="!data.freshness.source_results?.length">Source details were not recorded for this run.</p><p v-for="(source, index) in data.freshness.source_results || []" :key="index">{{ source.name }} · {{ source.status }} · {{ source.failed || 0 }} failures<span v-if="source.error"> · {{ source.error }}</span></p></details></section>
+
       <div v-if="error" class="error-banner"><strong>Dashboard data could not load.</strong> {{ error }} <button @click="loadDashboard(true)">Try again</button></div>
 
       <section class="section-heading">
@@ -132,7 +139,7 @@ onMounted(() => loadDashboard())
             <span class="quote-tag" :class="stock.status">{{ stock.status === 'available' ? '● LATEST QUOTE' : '○ NO DATA' }}</span>
           </div>
           <div class="stock-main">
-            <div><div class="stock-price">{{ money(stock.price, stock.currency) }}</div><div class="stock-updated">{{ asOf(stock.as_of) }}</div></div>
+            <div><div class="stock-price">{{ money(stock.price, stock.currency) }}</div><div class="stock-updated">{{ asOf(stock.as_of) }}<br>Retrieved {{ freshnessTime(stock.retrieved_at) }}<br>Live trade timestamp unavailable</div></div>
             <div class="change-pill" :class="stock.change_percent >= 0 ? 'positive' : 'negative'">
               <span>{{ stock.change_percent >= 0 ? '↗' : '↘' }}</span>{{ percent(stock.change_percent) }}
             </div>
@@ -177,12 +184,13 @@ onMounted(() => loadDashboard())
             <div class="panel-head"><div><span class="panel-kicker">03 · SIGNAL REVIEW</span><h3>What could move?</h3></div><span class="beta-chip">{{ data?.impact_analysis?.status === 'unavailable' ? 'MODEL UNAVAILABLE' : data?.impact_analysis?.status === 'no_articles' ? 'NO CURRENT STORIES' : data?.impact_analysis?.status === 'fallback_sentiment' ? 'FINBERT FALLBACK' : 'LOCAL HF MODEL' }}</span></div>
             <p class="impact-intro">Local analysis of saved company and global-topic news, mapped to watchlist securities. Cues are hypotheses, not stock price forecasts.</p>
             <div v-if="data?.impact_analysis?.evidence_brief?.summary" class="evidence-brief"><strong>PRE-ANALYSIS EVIDENCE BRIEF</strong><p>{{ data.impact_analysis.evidence_brief.summary }}</p></div>
+            <div v-if="data?.impact_analysis?.evidence_brief?.etf_context?.profiles?.length" class="evidence-brief"><strong>ETF EXPOSURE CONTEXT</strong><p v-for="etf in data.impact_analysis.evidence_brief.etf_context.profiles" :key="etf.symbol">{{ etf.symbol }} · {{ etf.benchmark }} · {{ etf.evidence.length }} candidate event links · holdings {{ etf.holdings_status }}<br><a :href="etf.source_url" target="_blank" rel="noreferrer">FUND / BENCHMARK SOURCE ↗</a></p><p>Sector and macro links are qualitative. Missing holdings do not establish constituent exposure.</p></div>
             <div class="impact-row upside"><div class="impact-icon">↗</div><div class="impact-content"><strong>Potential upside cues</strong>
-              <template v-if="data?.impact_analysis?.upside?.length"><div v-for="(signal, index) in data.impact_analysis.upside" :key="`${signal.url}-${index}`" class="signal-item"><p>{{ signal.title }}</p><small>Possible upside · model confidence {{ (signal.score * 100).toFixed(0) }}%<span v-if="signal.evidence_priority_score != null"> · evidence priority {{ signal.evidence_priority_score }}/100</span><span v-if="signal.symbols?.length"> · {{ signal.symbols.join(', ') }}</span></small><p v-if="signal.reason" class="signal-summary">{{ signal.reason }}</p><p v-else-if="signal.summary" class="signal-summary">{{ signal.summary }}</p><a :href="signal.url" target="_blank" rel="noreferrer">SOURCE ↗</a></div></template>
+              <template v-if="data?.impact_analysis?.upside?.length"><div v-for="(signal, index) in data.impact_analysis.upside" :key="`${signal.url}-${index}`" class="signal-item"><p>{{ signal.title }}</p><small>Possible upside · model confidence {{ (signal.score * 100).toFixed(0) }}%<span v-if="signal.evidence_priority_score != null"> · evidence priority {{ signal.evidence_priority_score }}/100</span><span v-if="signal.symbols?.length"> · {{ signal.symbols.join(', ') }}</span></small><p v-for="link in signal.etf_connections || []" :key="link.symbol" class="signal-summary">{{ link.symbol }} · {{ link.types.join(" / ") }} · holdings {{ link.holdings_status }}<span v-if="link.holdings_as_of"> as of {{ link.holdings_as_of }}</span> · {{ signal.horizon }}</p><p v-if="signal.reason" class="signal-summary">{{ signal.reason }}</p><p v-else-if="signal.summary" class="signal-summary">{{ signal.summary }}</p><a :href="signal.url" target="_blank" rel="noreferrer">SOURCE ↗</a></div></template>
               <p v-else class="no-signal">{{ data?.impact_analysis?.status === 'unavailable' ? 'The local sentiment model could not run.' : 'No positive sentiment cues in the stories shown.' }}</p>
             </div></div>
             <div class="impact-row downside"><div class="impact-icon">↘</div><div class="impact-content"><strong>Potential downside cues</strong>
-              <template v-if="data?.impact_analysis?.downside?.length"><div v-for="(signal, index) in data.impact_analysis.downside" :key="`${signal.url}-${index}`" class="signal-item"><p>{{ signal.title }}</p><small>Possible downside · model confidence {{ (signal.score * 100).toFixed(0) }}%<span v-if="signal.evidence_priority_score != null"> · evidence priority {{ signal.evidence_priority_score }}/100</span><span v-if="signal.symbols?.length"> · {{ signal.symbols.join(', ') }}</span></small><p v-if="signal.reason" class="signal-summary">{{ signal.reason }}</p><p v-else-if="signal.summary" class="signal-summary">{{ signal.summary }}</p><a :href="signal.url" target="_blank" rel="noreferrer">SOURCE ↗</a></div></template>
+              <template v-if="data?.impact_analysis?.downside?.length"><div v-for="(signal, index) in data.impact_analysis.downside" :key="`${signal.url}-${index}`" class="signal-item"><p>{{ signal.title }}</p><small>Possible downside · model confidence {{ (signal.score * 100).toFixed(0) }}%<span v-if="signal.evidence_priority_score != null"> · evidence priority {{ signal.evidence_priority_score }}/100</span><span v-if="signal.symbols?.length"> · {{ signal.symbols.join(', ') }}</span></small><p v-for="link in signal.etf_connections || []" :key="link.symbol" class="signal-summary">{{ link.symbol }} · {{ link.types.join(" / ") }} · holdings {{ link.holdings_status }}<span v-if="link.holdings_as_of"> as of {{ link.holdings_as_of }}</span> · {{ signal.horizon }}</p><p v-if="signal.reason" class="signal-summary">{{ signal.reason }}</p><p v-else-if="signal.summary" class="signal-summary">{{ signal.summary }}</p><a :href="signal.url" target="_blank" rel="noreferrer">SOURCE ↗</a></div></template>
               <p v-else class="no-signal">{{ data?.impact_analysis?.status === 'unavailable' ? 'The local sentiment model could not run.' : 'No negative sentiment cues in the stories shown.' }}</p>
             </div></div>
             <p v-if="data?.impact_analysis?.neutral?.length" class="neutral-note">{{ data.impact_analysis.neutral.length }} {{ data.impact_analysis.neutral.length === 1 ? 'story was' : 'stories were' }} labeled neutral and are not shown as upside or downside cues.</p>
