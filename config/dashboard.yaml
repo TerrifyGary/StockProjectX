@@ -47,12 +47,6 @@ stocks:
     ticker: GOOGL
     market: US
     currency: USD
-  - id: alphabet_c
-    name: Alphabet Class C
-    display_symbol: GOOG
-    ticker: GOOG
-    market: US
-    currency: USD
   - id: apple
     name: Apple
     display_symbol: AAPL

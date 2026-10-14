@@ -43,7 +43,7 @@ companies:
 
   - id: alphabet
     name: Alphabet / Google
-    tickers: [GOOG, GOOGL]
+    tickers: [GOOGL]
     exchanges: [NASDAQ]
     markets: [US]
     aliases: [Google, Alphabet, Google LLC, 谷歌, グーグル, アルファベット]

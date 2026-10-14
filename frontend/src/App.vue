@@ -95,6 +95,9 @@ onMounted(() => loadDashboard())
       <a class="rail-link" href="#news" aria-label="News" title="News">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v13H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z"/><path d="M7 8h9M7 12h10M7 16h5"/></svg>
       </a>
+      <a class="rail-link" href="#prediction-validation" aria-label="Prediction validation" title="Prediction validation">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16M8 15l4-5 4 2 4-7"/><path d="M16 5h4v4"/></svg>
+      </a>
       <div class="rail-bottom"><span class="online-dot"></span></div>
     </aside>
 
@@ -208,7 +211,7 @@ onMounted(() => loadDashboard())
         </aside>
       </section>
 
-      <section class="validation-card" aria-label="Prediction validation history">
+      <section id="prediction-validation" class="validation-card" aria-label="Prediction validation history">
         <div class="validation-copy">
           <span class="panel-kicker">05 · TRACK RECORD</span>
           <h2>Prediction validation</h2>

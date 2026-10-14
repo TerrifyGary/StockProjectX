@@ -77,7 +77,7 @@ MongoDB is the planned persistent store. A normalized URL or publisher-provided 
 
 The first watchlist includes:
 
-- Public companies: TSMC, Tesla (`TSLA`), Meta (`META`), Google/Alphabet (`GOOGL`/`GOOG`), Apple (`AAPL`), and NVIDIA (`NVDA`). Taiwan listings and company aliases should also be included where relevant (for example, TSMC's Taiwan listing).
+- Public companies: TSMC, Tesla (`TSLA`), Meta (`META`), Google/Alphabet (`GOOGL`), Apple (`AAPL`), and NVIDIA (`NVDA`). Taiwan listings and company aliases should also be included where relevant (for example, TSMC's Taiwan listing).
 - ETFs: Vanguard S&P 500 ETF (`VOO`), Invesco QQQ (`QQQ`), and Yuanta Taiwan 50 ETF (`0050.TW`, displayed as `0050`). These are included in Market Pulse and news matching; prediction history accumulates separately for each ETF.
 - Private companies: SpaceX, OpenAI, and Anthropic. These do not have public stock tickers, but their news can be tracked by company names, aliases, and related public-company connections.
 
@@ -269,7 +269,7 @@ Open [http://localhost:5173](http://localhost:5173) for the Vue dashboard and [h
 
 At each daily collection, the backend analyzes all saved articles published in the 08:00-to-08:00 Taiwan-time window, then stores the generated cues and investor note in `current_brief`. When the next report date begins, the previous brief is copied into `brief_history`; raw article records stay in `articles`. The frontend displays the top five articles and the saved daily analysis. If a window has no matching stories, the brief records that fact and the dashboard may show the latest saved articles with an **Archive Preview** label; older stories are never presented as current-window news. The bottom validation panel scores immutable calls against their exact target-session closes, reports abstention coverage and baseline comparisons, and shows each stock's training progress. LSTM v2 requires 30 completed-session observations and 40 usable samples per security. Earlier mutable-brief evaluations remain archived and are excluded from v2 metrics.
 
-Market Pulse uses the `yfinance` Python client to retrieve the latest available Yahoo Finance quote and one-month daily history for TSLA, TSM (TSMC's US ADR), 2330.TW (TSMC Taiwan), META, GOOGL, GOOG, AAPL, NVDA, VOO, QQQ, and 0050.TW. The two Alphabet share classes and both TSMC listings appear as separate securities. SpaceX, OpenAI, and Anthropic are private companies and have no public stock quotes, so they remain in the news watchlist but are not shown as stock cards. Quotes can be delayed, unavailable, or rate-limited; this prototype is not a licensed real-time market data service. See the [yfinance project documentation](https://github.com/ranaroussi/yfinance).
+Market Pulse uses the `yfinance` Python client to retrieve the latest available Yahoo Finance quote and one-month daily history for TSLA, TSM (TSMC's US ADR), 2330.TW (TSMC Taiwan), META, GOOGL, AAPL, NVDA, VOO, QQQ, and 0050.TW. Alphabet is represented by GOOGL; both TSMC listings appear as separate securities. SpaceX, OpenAI, and Anthropic are private companies and have no public stock quotes, so they remain in the news watchlist but are not shown as stock cards. Quotes can be delayed, unavailable, or rate-limited; this prototype is not a licensed real-time market data service. See the [yfinance project documentation](https://github.com/ranaroussi/yfinance).
 
 ### MongoDB document and indexes
 
