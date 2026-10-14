@@ -78,6 +78,7 @@ MongoDB is the planned persistent store. A normalized URL or publisher-provided 
 The first watchlist includes:
 
 - Public companies: TSMC, Tesla (`TSLA`), Meta (`META`), Google/Alphabet (`GOOGL`/`GOOG`), Apple (`AAPL`), and NVIDIA (`NVDA`). Taiwan listings and company aliases should also be included where relevant (for example, TSMC's Taiwan listing).
+- ETFs: Vanguard S&P 500 ETF (`VOO`), Invesco QQQ (`QQQ`), and Yuanta Taiwan 50 ETF (`0050.TW`, displayed as `0050`). These are included in Market Pulse and news matching; prediction history accumulates separately for each ETF.
 - Private companies: SpaceX, OpenAI, and Anthropic. These do not have public stock tickers, but their news can be tracked by company names, aliases, and related public-company connections.
 
 Company names, ticker symbols, localized names, and aliases should be configurable so the watchlist can expand and eventually be managed from the frontend. The watchlist identifies topics to collect; relevance categorization will be a separate later step.
@@ -268,7 +269,7 @@ Open [http://localhost:5173](http://localhost:5173) for the Vue dashboard and [h
 
 At each daily collection, the backend analyzes all saved articles published in the 08:00-to-08:00 Taiwan-time window, then stores the generated cues and investor note in `current_brief`. When the next report date begins, the previous brief is copied into `brief_history`; raw article records stay in `articles`. The frontend displays the top five articles and the saved daily analysis. If a window has no matching stories, the brief records that fact and the dashboard may show the latest saved articles with an **Archive Preview** label; older stories are never presented as current-window news. The bottom validation panel scores immutable calls against their exact target-session closes, reports abstention coverage and baseline comparisons, and shows each stock's training progress. LSTM v2 requires 30 completed-session observations and 40 usable samples per security. Earlier mutable-brief evaluations remain archived and are excluded from v2 metrics.
 
-Market Pulse uses the `yfinance` Python client to retrieve the latest available Yahoo Finance quote and one-month daily history for TSLA, TSM (TSMC's US ADR), 2330.TW (TSMC Taiwan), META, GOOGL, GOOG, AAPL, and NVDA. The two Alphabet share classes and both TSMC listings appear as separate securities. SpaceX, OpenAI, and Anthropic are private companies and have no public stock quotes, so they remain in the news watchlist but are not shown as stock cards. Quotes can be delayed, unavailable, or rate-limited; this prototype is not a licensed real-time market data service. See the [yfinance project documentation](https://github.com/ranaroussi/yfinance).
+Market Pulse uses the `yfinance` Python client to retrieve the latest available Yahoo Finance quote and one-month daily history for TSLA, TSM (TSMC's US ADR), 2330.TW (TSMC Taiwan), META, GOOGL, GOOG, AAPL, NVDA, VOO, QQQ, and 0050.TW. The two Alphabet share classes and both TSMC listings appear as separate securities. SpaceX, OpenAI, and Anthropic are private companies and have no public stock quotes, so they remain in the news watchlist but are not shown as stock cards. Quotes can be delayed, unavailable, or rate-limited; this prototype is not a licensed real-time market data service. See the [yfinance project documentation](https://github.com/ranaroussi/yfinance).
 
 ### MongoDB document and indexes
 
@@ -289,12 +290,88 @@ Startup creates indexes for unique `article_key` plus publication date and the e
 
 The local app includes the multilingual Python collector, global topic discovery through GDELT, optional Media Cloud and configured publisher feeds, 08:00 Asia/Taipei scheduler, local Hugging Face daily impact analysis, experimental LSTM direction model and next-session evaluation, FastAPI dashboard API, MongoDB, and Vue dark-mode dashboard. The LSTM needs at least 30 distinct completed-session observations and 40 usable training examples per security before producing predictions. Low-confidence forecasts abstain; confidence remains uncalibrated. The impact model and LSTM are experimental and have not been established as reliable forecasts; topic matches and model-generated stock cues can be noisy, so check the linked original sources before drawing conclusions. Configured discovery uses GDELT, Media Cloud (after its API key and collection IDs are configured), and official RSS sources listed in `config/sources.yaml`; broader publisher coverage, a Taiwan central-bank feed, and US/Taiwan/Japan benchmark bond price/yield series remain future additions.
 
-## Possible next steps
+## ETF-aware analysis
+
+`config/etfs.yaml` defines the ETF profiles used before Qwen analysis. Official profile references: [VOO](https://advisors.vanguard.com/investments/products/voo/vanguard-sp-500-etf), [QQQ](https://www.invesco.com/qqq-etf/en/about.html), and [0050](https://www.twse.com.tw/en/ETFortune-institute/etfInfo/0050).
+
+Each article receives candidate direct, constituent, sector, or macro connections. The model must explain the transmission mechanism before producing an ETF cue; connections do not imply a direction. Repeated titles are grouped in ETF context and do not add repeated directional votes. These are exact-title heuristics, not full semantic event clustering. FinBERT fallback does not generate ETF exposure conclusions.
+
+Holdings start empty and are labeled `missing`. To enable constituent mapping, provide `holdings_as_of: "YYYY-MM-DD"` and `holdings: [{symbol: NVDA, weight_percent: 0.0}]`, replacing the example weight with a verified value and setting `source_url` to its source. Weights are metadata only; they are not multiplied into expected returns. Snapshots older than 30 days or dated after analysis are excluded from constituent matching and labeled stale/future. Historical refresh automation is a future task. The original ETF context is retained in frozen briefs and prediction records, so updated configuration cannot rewrite issued forecasts.
+
+### Implementation roadmap
+
+Working branch: `feature/etf-aware-analysis`. Initial coverage: VOO, QQQ, and Taiwan's 0050 (`0050.TW`). Quote cards, direct ETF matching, qualitative sector/macro context, model prompt context, cue provenance display, and frozen forecast context are implemented. Dated constituent snapshots and automated holdings refresh remain to be populated.
+
+### Prioritized to-do
+
+| Priority | Task | Expected result |
+|---|---|---|
+| P0 — first | Add ETF profiles and dated exposure data | Record fund identity, benchmark, market, currency, sector exposure, and constituent weights with source URL and holdings date. Keep missing or stale data explicit. |
+| P0 — first | Map article evidence to ETF exposure | Distinguish direct fund news, constituent news, sector news, and macro news. Connect a constituent story only where a dated holding supports the relationship. |
+| P0 — first | Supply ETF context to the local Hugging Face model | Include exposure, supporting article IDs, proposed mechanism, and evidence limitations before generating ETF cues. Permit uncertain or insufficient-evidence outcomes. |
+| P1 — next | Persist and display explainable ETF cues | Save the affected ETF, direction, mechanism, horizon, source links, exposure provenance, and contradictory evidence; display these in What Could Move. |
+| P1 — next | Prevent overlapping evidence from inflating cues | Group repeated coverage of the same event and distinguish direct holdings from broader sector exposure. Keep the same event traceable across ETFs. |
+| P1 — next | Audit ETF predictions separately | Freeze the exposure snapshot used at issuance and score each ETF against its own next trading-session close using the existing forecast ledger and baselines. |
+| P1 — next | Validate the complete ETF flow | Cover dated holdings, stale/missing exposure, multilingual aliases, conflicting news, duplicate events, and US/Taiwan sessions with focused tests. |
+| P2 — later | Maintain exposure snapshots | Add scheduled refreshes from permitted fund-provider sources and retain historical snapshots for reproducible evaluation. |
+
+Constituent weight is an exposure measure, not an expected ETF return. Macro effects should be explained qualitatively when there is no supported quantitative relationship. Historical evaluations must use exposure data available at issuance; current holdings must not be applied retroactively.
+
+### Completion criteria
+
+- [ ] Each ETF cue links to saved news and identifies whether the evidence is direct, constituent, sector, or macro.
+- [ ] Holdings and sector context show source, date, and missing/stale status.
+- [ ] Conflicting or weak evidence can produce an uncertain result without forcing an up/down call.
+- [ ] Original predictions retain the exposure snapshot and remain unchanged on refresh.
+- [ ] The dashboard explains the ETF connection, and focused regression tests pass.
+
+## Data freshness indicators
+
+Branch: `feature/data-freshness-indicators`. The dashboard now reports current-window collection status, last successful collection, saved brief generation time, and the next configured scheduling boundary in Taiwan time. Source results include per-feed saved/skipped/failed totals; a failure may include article processing errors rather than a complete source outage. Older runs without source diagnostics show “not recorded.” Archive previews and outdated briefs are explicitly identified.
+
+Each quote displays retrieval time separately from its daily-history session date. Fast quote data has no verified live-trade timestamp here; retrieval time does not imply real-time prices. The five-minute quote cache retains the original retrieval time. Scheduling indicators describe the configured boundary, not proof that Docker or the scheduler is running. Runs marked running for more than two hours are labeled unconfirmed.
+
+## Broader dashboard priorities
+
+1. **ETF-aware analysis:** implement the plan above first.
+2. **Data freshness:** show last successful collection, quote timestamps, source failures, and the next scheduled refresh.
+3. **Event grouping:** consolidate duplicate reports while retaining all source links.
+4. **Cue explanations:** extend mechanisms, horizons, contradictory evidence, and insufficient-evidence outcomes to all securities.
+5. **Scoring:** accumulate per-security results and compare with baselines before using evaluation feedback in suggestion prompts.
+
+## Other possible next steps
 
 1. Add more permitted US and Taiwan feeds and review company/ticker matching to reduce missed stories and false positives.
 2. Review translation quality, especially for Traditional Chinese financial headlines.
 3. Evaluate the local impact model and LSTM against a growing history of next-session market closes before treating their outputs as predictions.
 4. Replace prototype price retrieval with a licensed market-data provider before public or commercial deployment.
+
+## Automated checks before merging
+
+`.github/workflows/ci.yml` runs on pull requests targeting `main`, pushes to `main`, and manual dispatch. It has two checks:
+
+- `backend-tests`: Python 3.11, CPU PyTorch, all unittest cases, and source compilation.
+- `frontend-build`: Node.js 20, dependency installation, and Vue/Vite production build.
+
+Tests use an in-memory MongoDB mock and mocked market/model responses; CI does not crawl publishers, write production data, or download Hugging Face checkpoints. The small LSTM fit test runs real CPU training on synthetic history. These checks do not establish forecast quality or verify live external feeds.
+
+To run the backend checks locally:
+
+```bash
+python -m pip install -e ".[test,local-model]"
+python -m unittest discover -s tests -v
+python -m compileall -q src
+```
+
+To run the frontend build:
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+After the workflow is pushed and its first PR run completes, configure a GitHub branch rule for `main`: require a pull request and require the `backend-tests` and `frontend-build` status checks before merging. The workflow runs checks; branch rules enforce the merge gate. No deployment job is configured yet. Cancelled superseded runs are replaced by checks for the latest commit.
 
 ## License
 

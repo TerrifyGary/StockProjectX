@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -12,7 +13,7 @@ from fastapi import FastAPI, HTTPException
 from pymongo import DESCENDING, MongoClient
 
 from stock_news.config import Settings, load_yaml
-from stock_news.news_window import latest_completed_window
+from stock_news.news_window import latest_completed_window, next_run_time
 from stock_news.impact import get_sentiment_analyzer
 from stock_news.daily_briefs import validation_summary
 from stock_news.evidence_brief import build_evidence_brief
@@ -57,6 +58,8 @@ def _get_quotes() -> list[dict[str, Any]]:
                 "price": None,
                 "change_percent": None,
                 "as_of": None,
+                "retrieved_at": datetime.now(timezone.utc).isoformat(),
+                "timestamp_kind": "daily_history_session; live_quote_timestamp_unknown",
                 "history": [],
                 "status": "unavailable",
             }
@@ -232,6 +235,7 @@ def dashboard() -> dict[str, Any]:
                 "end": window_end.isoformat(),
                 "label": f"{window_start.astimezone(ZoneInfo(settings.window_timezone)).strftime('%Y-%m-%d %H:%M')} – {window_end.astimezone(ZoneInfo(settings.window_timezone)).strftime('%Y-%m-%d %H:%M')} Taiwan time",
             },
+            "freshness": collection_freshness(run, brief, window_end),
             "last_refresh": run,
             "news_mode": news_mode,
             "news_count": news_count,
@@ -329,3 +333,27 @@ def predictions(limit: int = 50, model: str | None = None, status: str | None = 
         query["status"] = status
     items = list(database.prediction_records.find(query, {"_id": 0}).sort("issued_at", DESCENDING).limit(min(max(limit, 1), 100)))
     return {"items": items, "validation": validation_summary(database)}
+
+
+def collection_freshness(run, brief, window_end):
+    now = datetime.now(timezone.utc)
+    latest_success = database.collection_runs.find_one(
+        {"failed": 0, "status": {"$nin": ["running", "failed", "partial"]}},
+        {"_id": 0, "updated_at": 1, "window_end": 1}, sort=[("updated_at", DESCENDING)]
+    )
+    status = (run or {}).get("status") or ("partial" if (run or {}).get("failed") else "completed" if run else "not_collected")
+    started = (run or {}).get("attempt_started_at")
+    if status == "running" and started and (now - started).total_seconds() > 7200:
+        status = "running_status_unconfirmed"
+    current = bool(brief and _same_instant(brief.get("window_end"), window_end))
+    return {
+        "checked_at": now.isoformat(), "collection_status": status,
+        "brief_current": current, "brief_generated_at": (brief or {}).get("created_at"),
+        "last_success": latest_success, "last_attempt_started_at": started,
+        "last_attempt_finished_at": (run or {}).get("updated_at") if status != "running" else None,
+        "source_results": (run or {}).get("source_results"),
+        "error": (run or {}).get("error"),
+        "next_scheduled_at": next_run_time(settings.window_timezone, settings.window_start_hour).isoformat(),
+        "schedule_timezone": settings.window_timezone,
+        "schedule_note": "Scheduled boundary; requires the scheduler and host to be running. Incomplete windows retry approximately every 15 minutes.",
+    }

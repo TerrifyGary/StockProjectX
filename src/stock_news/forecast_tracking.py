@@ -89,6 +89,7 @@ def register_forecasts(database: Any, frozen: dict[str, Any]) -> dict[str, Any]:
                 "training_cutoff": prediction.get("training_cutoff"),
                 "training_samples": prediction.get("training_samples"),
                 "training_parameters": frozen.get("lstm", {}).get("training_parameters") if model == "lstm" else None,
+                "etf_context": frozen.get("impact_analysis", {}).get("evidence_brief", {}).get("etf_context", {}),
                 "input_article_keys": frozen.get("article_keys", []),
                 "input_model": frozen.get("impact_analysis", {}).get("model"),
                 "status": "pending",

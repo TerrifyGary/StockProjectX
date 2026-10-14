@@ -149,7 +149,10 @@ def build_evidence_brief(
     if not articles:
         lines.append("No stories are available for scoring.")
 
+    from stock_news.etf_context import build_etf_context
+
     return {
+        "etf_context": build_etf_context(articles, reference_time=reference),
         "method": "rule_based_evidence_priority_v1",
         "score_interpretation": "0-100 ranking aid only; not direction, probability, source credibility, or expected price movement.",
         "story_count": len(articles),

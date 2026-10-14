@@ -85,6 +85,10 @@ def main() -> int:
             )
             return 0
 
+        run_filter = {"window_start": window_start, "window_end": window_end}
+        attempt_started_at = datetime.now(timezone.utc)
+        collection.database.collection_runs.update_one(run_filter, {"$set": {"status": "running", "attempt_started_at": attempt_started_at, "source_results": []}, "$unset": {"error": ""}}, upsert=True)
+        source_results = []
         print(f"Collection window: {window_start.isoformat()} to {window_end.isoformat()}")
         print(f"Loading local summarization model: {settings.model_name}")
         summarizer = LocalMTS5Summarizer(settings.model_name, settings.model_device)
@@ -109,6 +113,8 @@ def main() -> int:
                 except Exception as error:
                     print(f"[feed error] {feed['name']}: {error}")
                     total_failed += 1
+                    source_results.append({"name": feed["name"], "status": "failed", "failed": 1, "error": f"{type(error).__name__}: {str(error)[:250]}"})
+                    collection.database.collection_runs.update_one(run_filter, {"$set": {"source_results": source_results}})
                     continue
             updated, skipped, failed = collect_feed(
                 feed=feed,
@@ -123,6 +129,8 @@ def main() -> int:
                 topics=topics,
                 entries_override=entries_override,
             )
+            source_results.append({"name": feed["name"], "status": "partial" if failed else "completed", "saved": updated, "skipped": skipped, "failed": failed})
+            collection.database.collection_runs.update_one(run_filter, {"$set": {"source_results": source_results}})
             total_updated += updated
             total_skipped += skipped
             total_failed += failed
@@ -162,6 +170,9 @@ def main() -> int:
                     "window_end": window_end,
                     "timezone": settings.window_timezone,
                     "updated_at": datetime.now(timezone.utc),
+                    "status": "partial" if total_failed else "completed",
+                    "source_results": source_results,
+                    "attempt_started_at": attempt_started_at,
                     "saved": total_updated,
                     "skipped": total_skipped,
                     "failed": total_failed,
@@ -170,6 +181,10 @@ def main() -> int:
             },
             upsert=True,
         )
+    except Exception as error:
+        if "run_filter" in locals():
+            collection.database.collection_runs.update_one(run_filter, {"$set": {"status": "failed", "updated_at": datetime.now(timezone.utc), "error": f"{type(error).__name__}: {str(error)[:250]}"}})
+        raise
     finally:
         client.close()
     return 0
