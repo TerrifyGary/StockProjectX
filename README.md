@@ -77,7 +77,7 @@ MongoDB is the planned persistent store. A normalized URL or publisher-provided 
 
 The first watchlist includes:
 
-- Public companies: TSMC, Tesla (`TSLA`), Meta (`META`), Google/Alphabet (`GOOGL`/`GOOG`), Apple (`AAPL`), and NVIDIA (`NVDA`). Taiwan listings and company aliases should also be included where relevant (for example, TSMC's Taiwan listing).
+- Public companies: TSMC, Tesla (`TSLA`), Meta (`META`), Google/Alphabet (`GOOGL`), Apple (`AAPL`), and NVIDIA (`NVDA`). Taiwan listings and company aliases should also be included where relevant (for example, TSMC's Taiwan listing).
 - ETFs: Vanguard S&P 500 ETF (`VOO`), Invesco QQQ (`QQQ`), and Yuanta Taiwan 50 ETF (`0050.TW`, displayed as `0050`). These are included in Market Pulse and news matching; prediction history accumulates separately for each ETF.
 - Private companies: SpaceX, OpenAI, and Anthropic. These do not have public stock tickers, but their news can be tracked by company names, aliases, and related public-company connections.
 
@@ -269,7 +269,7 @@ Open [http://localhost:5173](http://localhost:5173) for the Vue dashboard and [h
 
 At each daily collection, the backend analyzes all saved articles published in the 08:00-to-08:00 Taiwan-time window, then stores the generated cues and investor note in `current_brief`. When the next report date begins, the previous brief is copied into `brief_history`; raw article records stay in `articles`. The frontend displays the top five articles and the saved daily analysis. If a window has no matching stories, the brief records that fact and the dashboard may show the latest saved articles with an **Archive Preview** label; older stories are never presented as current-window news. The bottom validation panel scores immutable calls against their exact target-session closes, reports abstention coverage and baseline comparisons, and shows each stock's training progress. LSTM v2 requires 30 completed-session observations and 40 usable samples per security. Earlier mutable-brief evaluations remain archived and are excluded from v2 metrics.
 
-Market Pulse uses the `yfinance` Python client to retrieve the latest available Yahoo Finance quote and one-month daily history for TSLA, TSM (TSMC's US ADR), 2330.TW (TSMC Taiwan), META, GOOGL, GOOG, AAPL, NVDA, VOO, QQQ, and 0050.TW. The two Alphabet share classes and both TSMC listings appear as separate securities. SpaceX, OpenAI, and Anthropic are private companies and have no public stock quotes, so they remain in the news watchlist but are not shown as stock cards. Quotes can be delayed, unavailable, or rate-limited; this prototype is not a licensed real-time market data service. See the [yfinance project documentation](https://github.com/ranaroussi/yfinance).
+Market Pulse uses the `yfinance` Python client to retrieve the latest available Yahoo Finance quote and one-month daily history for TSLA, TSM (TSMC's US ADR), 2330.TW (TSMC Taiwan), META, GOOGL, AAPL, NVDA, VOO, QQQ, and 0050.TW. Alphabet is represented by GOOGL; both TSMC listings appear as separate securities. SpaceX, OpenAI, and Anthropic are private companies and have no public stock quotes, so they remain in the news watchlist but are not shown as stock cards. Quotes can be delayed, unavailable, or rate-limited; this prototype is not a licensed real-time market data service. See the [yfinance project documentation](https://github.com/ranaroussi/yfinance).
 
 ### MongoDB document and indexes
 
@@ -346,12 +346,52 @@ Each quote displays retrieval time separately from its daily-history session dat
 3. Evaluate the local impact model and LSTM against a growing history of next-session market closes before treating their outputs as predictions.
 4. Replace prototype price retrieval with a licensed market-data provider before public or commercial deployment.
 
+## Group duplicate stories into events
+
+The backend groups reports before daily analysis and before choosing the dashboard's top five events. Raw `articles` remain unchanged; saved briefs retain grouped `events`, `event_count`, all original article keys, and publisher reports. The model receives every report in a group, including summaries and URLs, so conflicting evidence remains reviewable. Each event/security/direction contributes at most one vote. Multiple publishers do not automatically increase confidence.
+
+`event_grouping.py` uses normalized English headlines (original text when unavailable), shared entities, a 48-hour publication-distance limit, and high token overlap. Differing numbers, negation, or opposite direction words prevent headline grouping. Exact canonical URLs also group. Matching compares to the representative report rather than chaining weak similarities. This is a conservative heuristic: paraphrases may remain separate and similar headlines can still be grouped incorrectly. Cross-language grouping depends on the saved English translations; no embedding model is downloaded. Event IDs identify a membership snapshot and can change as new reports arrive.
+
+Top Stories shows one representative headline with expandable publisher links. Archive results remain labeled as archive. Newly generated briefs use grouped analysis; previous frozen forecasts remain unchanged. The grouped reports and forecast snapshots retain original source links for review.
+
+## Run smoke tests first
+
+Run these fast executable-app checks before longer tests, builds, collection, or deployment:
+
+```bash
+python -m pip install -e ".[test]"
+python -m unittest discover -s tests -p 'test_smoke*.py' -v
+```
+
+The smoke suite also checks CI dependencies and deliberately simulates a failed health check to confirm that it returns exit code 1 and prevents a follow-up command. Tests use temporary files and an unusable endpoint; they do not stop the running app.
+
+They use mocked database and external-service dependencies and do not crawl news or load model checkpoints. A pass verifies basic executable paths, not live feeds or prediction quality.
+
+For services already running in Docker, check actual API/MongoDB health, the frontend entry page, and its API proxy:
+
+```bash
+python3 scripts/smoke_running.py
+```
+
+Use `&&` to gate a follow-up command on a successful check. For example, only inspect Docker services when all live checks pass:
+
+```bash
+python3 scripts/smoke_running.py && docker compose ps
+```
+
+Replace `docker compose ps` with the intended command when needed. Running the smoke script separately does not automatically block later terminal commands.
+
+The script is read-only and exits nonzero if any check fails. Run it after startup as well as before further work on a running app. It checks the served HTML entry, not browser rendering or full UI interactions. URL overrides are available through `--api` and `--frontend`.
+
 ## Automated checks before merging
 
-`.github/workflows/ci.yml` runs on pull requests targeting `main`, pushes to `main`, and manual dispatch. It has two checks:
+`.github/workflows/ci.yml` runs on pull requests targeting `main`, pushes to `main`, and manual dispatch. It has three checks:
 
+- `smoke-tests`: fast service imports, CLI help, configuration loading, mocked API routes, and health responses. This must pass before the other jobs start.
 - `backend-tests`: Python 3.11, CPU PyTorch, all unittest cases, and source compilation.
 - `frontend-build`: Node.js 20, dependency installation, and Vue/Vite production build.
+
+Both follow-up CI jobs declare `needs: smoke-tests`. If smoke tests fail or are cancelled, GitHub skips those jobs; neither uses `always()` or `continue-on-error`. This dependency configuration is tested locally. GitHub execution is only confirmed after pushing this workflow version and inspecting a run.
 
 Tests use an in-memory MongoDB mock and mocked market/model responses; CI does not crawl publishers, write production data, or download Hugging Face checkpoints. The small LSTM fit test runs real CPU training on synthetic history. These checks do not establish forecast quality or verify live external feeds.
 
@@ -371,7 +411,7 @@ npm install
 npm run build
 ```
 
-After the workflow is pushed and its first PR run completes, configure a GitHub branch rule for `main`: require a pull request and require the `backend-tests` and `frontend-build` status checks before merging. The workflow runs checks; branch rules enforce the merge gate. No deployment job is configured yet. Cancelled superseded runs are replaced by checks for the latest commit.
+After the workflow is pushed and its first PR run completes, configure a GitHub branch rule for `main`: require a pull request and require the `smoke-tests`, `backend-tests`, and `frontend-build` status checks before merging. The workflow runs checks; branch rules enforce the merge gate. No deployment job is configured yet. Cancelled superseded runs are replaced by checks for the latest commit.
 
 ## License
 

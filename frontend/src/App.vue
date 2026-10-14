@@ -95,6 +95,9 @@ onMounted(() => loadDashboard())
       <a class="rail-link" href="#news" aria-label="News" title="News">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v13H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z"/><path d="M7 8h9M7 12h10M7 16h5"/></svg>
       </a>
+      <a class="rail-link" href="#prediction-validation" aria-label="Prediction validation" title="Prediction validation">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16M8 15l4-5 4 2 4-7"/><path d="M16 5h4v4"/></svg>
+      </a>
       <div class="rail-bottom"><span class="online-dot"></span></div>
     </aside>
 
@@ -173,7 +176,7 @@ onMounted(() => loadDashboard())
             <div class="news-body">
               <div class="news-meta"><span class="source-name">{{ article.source?.name || 'NEWS SOURCE' }}</span><span class="meta-dot"></span><span>{{ published(article.published_at) }} TST</span><span class="lang-chip">{{ article.language }}</span><span v-if="article.topics?.length" class="global-chip">GLOBAL TOPIC</span></div>
               <a class="news-title" :href="article.url" target="_blank" rel="noreferrer">{{ article.display_title }}</a>
-              <p class="news-summary">{{ article.display_summary || 'Summary is not available yet.' }}</p>
+              <details v-if="article.sources?.length > 1"><summary>{{ article.report_count }} reports · {{ article.source_count }} publishers</summary><p v-for="(source, i) in article.sources" :key="i"><a :href="source.url" target="_blank" rel="noreferrer">{{ source.name }} · {{ source.title }}</a></p></details><p class="news-summary">{{ article.display_summary || 'Summary is not available yet.' }}</p>
               <div class="news-footer"><div class="entity-tags"><span v-for="entity in (article.entities || []).slice(0, 3)" :key="entity.id">{{ entity.name }}</span><span v-for="topic in (article.topics || [])" :key="topic" class="topic-tag">{{ formatTopic(topic) }}</span></div><a class="source-link" :href="article.url" target="_blank" rel="noreferrer">VIEW SOURCE <span>↗</span></a></div>
             </div>
           </article>
@@ -208,7 +211,7 @@ onMounted(() => loadDashboard())
         </aside>
       </section>
 
-      <section class="validation-card" aria-label="Prediction validation history">
+      <section id="prediction-validation" class="validation-card" aria-label="Prediction validation history">
         <div class="validation-copy">
           <span class="panel-kicker">05 · TRACK RECORD</span>
           <h2>Prediction validation</h2>
