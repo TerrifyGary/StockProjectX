@@ -129,6 +129,7 @@ class LocalNewsImpactModel:
                     ],
                     "evidence_priority_score": evidence_score["priority_score"],
                     "evidence_score_components": evidence_score["components"],
+                    "reports": article.get("sources", []),
                     "url": article.get("url"),
                 }
             )
@@ -148,6 +149,7 @@ class LocalNewsImpactModel:
                 "\"symbols\":[string],\"reason\":string,\"confidence\":number}]} where confidence "
                 "is your separate 0..1 confidence in the evidence-based cue, article_id must be from "
                 "the supplied stories, and symbols must come from the watchlist. Use concise reasons "
+                "Each story is one grouped event; review every publisher report, retain contradictions, and do not boost confidence for repeated coverage. Reasons must be "
                 "grounded in the article. Preserve mixed evidence instead of forcing a net call.\n"
                 "PRE-ANALYSIS EVIDENCE BRIEF:\n"
                 + evidence_brief["summary"]
@@ -156,7 +158,7 @@ class LocalNewsImpactModel:
                 + "\nWATCHLIST:\n"
                 + json.dumps(company_rows, ensure_ascii=False)
                 + "\nSTORIES:\n"
-                + json.dumps(batch, ensure_ascii=False)
+                + json.dumps(batch, ensure_ascii=False, default=str)
             )
             parsed = self._generate_json(instruction)
             batch_ids = {item["id"] for item in batch}
@@ -199,6 +201,8 @@ class LocalNewsImpactModel:
                         "topics": article.get("topics", []),
                         "etf_connections": etf_links,
                         "horizon": "short-term hypothesis",
+                        "event_id": article.get("event_id"),
+                        "sources": article.get("sources", []),
                         "article_id": article_index,
                         "symbols": symbols,
                         "direction": direction,
@@ -227,12 +231,11 @@ class LocalNewsImpactModel:
         seen_etf_votes = set()
         for cue in cues:
             for symbol in cue["symbols"]:
-                if symbol in etf_profiles:
-                    event = " ".join(str(cue.get("title") or cue.get("url")).casefold().split())
-                    key = (symbol, event, cue["direction"])
-                    if key in seen_etf_votes:
-                        continue
-                    seen_etf_votes.add(key)
+                event = cue.get("event_id") or " ".join(str(cue.get("title") or cue.get("url")).casefold().split())
+                key = (symbol, event, cue["direction"])
+                if key in seen_etf_votes:
+                    continue
+                seen_etf_votes.add(key)
                 ballot = votes.setdefault(symbol, {"upside": 0.0, "downside": 0.0})
                 ballot[cue["direction"]] += cue["rank_score"]
         directions = []

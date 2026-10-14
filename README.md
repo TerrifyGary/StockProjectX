@@ -346,12 +346,52 @@ Each quote displays retrieval time separately from its daily-history session dat
 3. Evaluate the local impact model and LSTM against a growing history of next-session market closes before treating their outputs as predictions.
 4. Replace prototype price retrieval with a licensed market-data provider before public or commercial deployment.
 
+## Group duplicate stories into events
+
+The backend groups reports before daily analysis and before choosing the dashboard's top five events. Raw `articles` remain unchanged; saved briefs retain grouped `events`, `event_count`, all original article keys, and publisher reports. The model receives every report in a group, including summaries and URLs, so conflicting evidence remains reviewable. Each event/security/direction contributes at most one vote. Multiple publishers do not automatically increase confidence.
+
+`event_grouping.py` uses normalized English headlines (original text when unavailable), shared entities, a 48-hour publication-distance limit, and high token overlap. Differing numbers, negation, or opposite direction words prevent headline grouping. Exact canonical URLs also group. Matching compares to the representative report rather than chaining weak similarities. This is a conservative heuristic: paraphrases may remain separate and similar headlines can still be grouped incorrectly. Cross-language grouping depends on the saved English translations; no embedding model is downloaded. Event IDs identify a membership snapshot and can change as new reports arrive.
+
+Top Stories shows one representative headline with expandable publisher links. Archive results remain labeled as archive. Newly generated briefs use grouped analysis; previous frozen forecasts remain unchanged. The grouped reports and forecast snapshots retain original source links for review.
+
+## Run smoke tests first
+
+Run these fast executable-app checks before longer tests, builds, collection, or deployment:
+
+```bash
+python -m pip install -e ".[test]"
+python -m unittest discover -s tests -p 'test_smoke*.py' -v
+```
+
+The smoke suite also checks CI dependencies and deliberately simulates a failed health check to confirm that it returns exit code 1 and prevents a follow-up command. Tests use temporary files and an unusable endpoint; they do not stop the running app.
+
+They use mocked database and external-service dependencies and do not crawl news or load model checkpoints. A pass verifies basic executable paths, not live feeds or prediction quality.
+
+For services already running in Docker, check actual API/MongoDB health, the frontend entry page, and its API proxy:
+
+```bash
+python3 scripts/smoke_running.py
+```
+
+Use `&&` to gate a follow-up command on a successful check. For example, only inspect Docker services when all live checks pass:
+
+```bash
+python3 scripts/smoke_running.py && docker compose ps
+```
+
+Replace `docker compose ps` with the intended command when needed. Running the smoke script separately does not automatically block later terminal commands.
+
+The script is read-only and exits nonzero if any check fails. Run it after startup as well as before further work on a running app. It checks the served HTML entry, not browser rendering or full UI interactions. URL overrides are available through `--api` and `--frontend`.
+
 ## Automated checks before merging
 
-`.github/workflows/ci.yml` runs on pull requests targeting `main`, pushes to `main`, and manual dispatch. It has two checks:
+`.github/workflows/ci.yml` runs on pull requests targeting `main`, pushes to `main`, and manual dispatch. It has three checks:
 
+- `smoke-tests`: fast service imports, CLI help, configuration loading, mocked API routes, and health responses. This must pass before the other jobs start.
 - `backend-tests`: Python 3.11, CPU PyTorch, all unittest cases, and source compilation.
 - `frontend-build`: Node.js 20, dependency installation, and Vue/Vite production build.
+
+Both follow-up CI jobs declare `needs: smoke-tests`. If smoke tests fail or are cancelled, GitHub skips those jobs; neither uses `always()` or `continue-on-error`. This dependency configuration is tested locally. GitHub execution is only confirmed after pushing this workflow version and inspecting a run.
 
 Tests use an in-memory MongoDB mock and mocked market/model responses; CI does not crawl publishers, write production data, or download Hugging Face checkpoints. The small LSTM fit test runs real CPU training on synthetic history. These checks do not establish forecast quality or verify live external feeds.
 
@@ -371,7 +411,7 @@ npm install
 npm run build
 ```
 
-After the workflow is pushed and its first PR run completes, configure a GitHub branch rule for `main`: require a pull request and require the `backend-tests` and `frontend-build` status checks before merging. The workflow runs checks; branch rules enforce the merge gate. No deployment job is configured yet. Cancelled superseded runs are replaced by checks for the latest commit.
+After the workflow is pushed and its first PR run completes, configure a GitHub branch rule for `main`: require a pull request and require the `smoke-tests`, `backend-tests`, and `frontend-build` status checks before merging. The workflow runs checks; branch rules enforce the merge gate. No deployment job is configured yet. Cancelled superseded runs are replaced by checks for the latest commit.
 
 ## License
 

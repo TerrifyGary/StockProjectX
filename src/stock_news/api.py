@@ -145,7 +145,7 @@ def dashboard() -> dict[str, Any]:
             articles = list(
                 database.articles.find(
                     {"article_key": {"$in": article_keys}}, article_projection
-                ).sort("published_at", DESCENDING).limit(5)
+                ).sort("published_at", DESCENDING)
             )
             news_count = int(brief.get("article_count", len(article_keys)))
             window_news_count = news_count
@@ -155,7 +155,7 @@ def dashboard() -> dict[str, Any]:
                         {"published_at": {"$lt": window_start}}, article_projection
                     )
                     .sort("published_at", DESCENDING)
-                    .limit(5)
+
                 )
                 news_mode = "archive" if articles else "window"
                 news_count = len(articles)
@@ -168,13 +168,17 @@ def dashboard() -> dict[str, Any]:
                     article_projection,
                 )
                 .sort("published_at", DESCENDING)
-                .limit(5)
+
             )
             news_count = database.articles.count_documents(
                 {"published_at": {"$gte": window_start, "$lt": window_end}}
             )
             window_news_count = news_count
             news_mode = "window"
+        from stock_news.event_grouping import group_stories
+        events = group_stories(articles)
+        event_count = len(events)
+        articles = events[:5]
         for article in articles:
             article["published_at"] = article["published_at"].isoformat()
             article["display_title"] = article.get("title_en") or article.get("title")
@@ -242,6 +246,7 @@ def dashboard() -> dict[str, Any]:
             "window_news_count": window_news_count,
             "stocks": quotes,
             "news": articles,
+            "event_count": event_count,
             "validation": validation_summary(database),
             "impact_analysis": {
                 "status": impact_status,

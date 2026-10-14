@@ -173,7 +173,7 @@ onMounted(() => loadDashboard())
             <div class="news-body">
               <div class="news-meta"><span class="source-name">{{ article.source?.name || 'NEWS SOURCE' }}</span><span class="meta-dot"></span><span>{{ published(article.published_at) }} TST</span><span class="lang-chip">{{ article.language }}</span><span v-if="article.topics?.length" class="global-chip">GLOBAL TOPIC</span></div>
               <a class="news-title" :href="article.url" target="_blank" rel="noreferrer">{{ article.display_title }}</a>
-              <p class="news-summary">{{ article.display_summary || 'Summary is not available yet.' }}</p>
+              <details v-if="article.sources?.length > 1"><summary>{{ article.report_count }} reports · {{ article.source_count }} publishers</summary><p v-for="(source, i) in article.sources" :key="i"><a :href="source.url" target="_blank" rel="noreferrer">{{ source.name }} · {{ source.title }}</a></p></details><p class="news-summary">{{ article.display_summary || 'Summary is not available yet.' }}</p>
               <div class="news-footer"><div class="entity-tags"><span v-for="entity in (article.entities || []).slice(0, 3)" :key="entity.id">{{ entity.name }}</span><span v-for="topic in (article.topics || [])" :key="topic" class="topic-tag">{{ formatTopic(topic) }}</span></div><a class="source-link" :href="article.url" target="_blank" rel="noreferrer">VIEW SOURCE <span>↗</span></a></div>
             </div>
           </article>

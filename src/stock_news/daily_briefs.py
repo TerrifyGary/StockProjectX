@@ -96,6 +96,8 @@ def make_daily_brief(
         article["display_title"] = article.get("title_en") or article.get("title") or ""
         summary = article.get("summary", {})
         article["display_summary"] = summary.get("text_en") or summary.get("text") or ""
+    from stock_news.event_grouping import group_stories
+    articles = group_stories(articles)
     evidence_brief = build_evidence_brief(articles, reference_time=window_end)
 
     if articles:
@@ -178,7 +180,7 @@ def make_daily_brief(
         candidate = {
             "report_date": report_date, "created_at": datetime.now(timezone.utc),
             "prices": clean_prices, "impact_analysis": {"model": impact_model, **impact_analysis},
-            "article_keys": [article["article_key"] for article in articles],
+            "article_keys": [key for article in articles for key in article.get("article_keys", [article["article_key"]])],
         }
         history = list(database.forecast_briefs.find({}, {"_id": 0}).sort("created_at", 1))
         candidate["lstm"] = predict_next_directions(history, candidate)
@@ -202,8 +204,10 @@ def make_daily_brief(
         "created_at": datetime.now(window_end.tzinfo),
         "window_start": window_start,
         "window_end": window_end,
-        "article_keys": [article["article_key"] for article in articles],
-        "article_count": len(articles),
+        "article_keys": [key for article in articles for key in article.get("article_keys", [article["article_key"]])],
+        "article_count": sum(a.get("report_count", 1) for a in articles),
+        "event_count": len(articles),
+        "events": articles,
         "impact_analysis": {
             "status": impact_status,
             "provider": impact_provider,
